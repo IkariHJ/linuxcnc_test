@@ -1,0 +1,58 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Attach milltask 运动任务进程",
+            "type": "cppdbg",
+            "request": "attach",
+            "program": "${workspaceFolder}/bin/milltask",
+            "MIMode": "gdb",
+            // 删除之前填的 /usr/bin/sudo，不要指定miDebuggerPath，自动识别系统gdb
+            "setupCommands": [
+                {
+                    "text": "set breakpoint pending on",
+                    "description": "允许未加载模块的延迟断点",
+                    "ignoreFailures": false
+                },
+                {
+                    "text": "set print pretty on",
+                    "description": "美化结构体打印"
+                },
+                {
+                    "text": "handle SIGTRAP noprint pass",
+                    "description": "屏蔽attach时libc的SIGTRAP弹窗中断"
+                }
+            ],
+            "sourceFileMap": {
+                "/home/test/Desktop/VS_Work/linuxcnc": "${workspaceFolder}"
+            }
+        } ,
+        {
+            "name": "Attach 主Python进程(自定义HAL模块专用)",
+            "type": "cppdbg",
+            "request": "attach",
+            "MIMode": "gdb",
+            "processId": "${command:pickProcess}",
+            "stopAtConnect": false,
+            "setupCommands": [
+                {
+                    "text": "set breakpoint pending on",
+                    "description": "允许延迟断点，等.so dlopen后激活"
+                },
+                {
+                    "text": "set print pretty on",
+                },
+                {
+                    "text": "set print static-members on",
+                },
+                {
+                    "text": "handle SIGTRAP noprint pass",
+                    "description": "屏蔽attach libc多余中断"
+                }
+            ],
+            "sourceFileMap": {
+                "/home/test/Desktop/VS_Work/linuxcnc": "${workspaceFolder}"
+            }
+        }
+    ]
+}
