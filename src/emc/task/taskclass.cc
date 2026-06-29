@@ -309,50 +309,82 @@ int emcTaskOnce(const char *filename)
     // NB: the interpreter.this global will appear only after Interp.init()
 
     extern struct _inittab builtin_modules[];
-    if (!PythonPlugin::instantiate(builtin_modules)) {
-	rcs_print("emcTaskOnce: can\'t instantiate Python plugin\n");
-	goto no_pytask;
+
+    // 启动Python插件
+    if (!PythonPlugin::instantiate(builtin_modules)) 
+    {
+        rcs_print("emcTaskOnce: can\'t instantiate Python plugin\n");
+        goto no_pytask;
     }
-    if (python_plugin->configure(filename, "PYTHON") == PLUGIN_OK) {
-	if (emc_debug & EMC_DEBUG_PYTHON_TASK) {
-	    rcs_print("emcTaskOnce: Python plugin configured\n");
-	}
-    } else {
-	goto no_pytask;
+
+    // 读取 INI 配置中 [PYTHON] 段落参数,初始化 Python 搜索路径、加载全局脚本；
+    // filename 即机床 INI 文件路径。
+    // INI中没有Python参数，读啥？？？
+    if (python_plugin->configure(filename, "PYTHON") == PLUGIN_OK) 
+    {
+        if (emc_debug & EMC_DEBUG_PYTHON_TASK) 
+        {
+            rcs_print("emcTaskOnce: Python plugin configured\n");
+        }
     }
-    if (PYUSABLE) {
-	// extract the instance of Python Task()
-	try {
-	    bp::object task_namespace =  python_plugin->main_namespace[TASK_MODULE].attr("__dict__");;
-	    bp::object result = task_namespace[TASK_VAR];
-	    bp::extract<Task *> typetest(result);
-	    if (typetest.check()) {
-		task_methods = bp::extract< Task * >(result);
-	    } else {
-		rcs_print("can\'t extract a Task instance out of '%s'\n", instance_name);
-		task_methods = NULL;
-	    }
-	} catch(bp::error_already_set &) {
-	    std::string msg = handle_pyerror();
-	    if (emc_debug & EMC_DEBUG_PYTHON_TASK) {
-		// this really just means the task python backend wasn't configured.
-		rcs_print("emcTaskOnce: extract(%s): %s\n", instance_name, msg.c_str());
-	    }
-	    PyErr_Clear();
-	}
+    else 
+    {
+        goto no_pytask;
     }
+
+
+    if (PYUSABLE) 
+    {
+	    // extract the instance of Python Task()
+        try 
+        {
+            // 1. 获取Python主模块命名空间字典
+            bp::object task_namespace =  python_plugin->main_namespace[TASK_MODULE].attr("__dict__");;
+            // 2. 取出全局Task实例对象（TASK_VAR为全局变量名）
+            bp::object result = task_namespace[TASK_VAR];
+            // 3. Boost.Python类型校验：是否是C++ Task包装类型
+            bp::extract<Task *> typetest(result);
+            if (typetest.check()) 
+            {
+                // 校验通过：把Python对象映射为C++ Task*，赋值全局task_methods
+                task_methods = bp::extract< Task * >(result);
+            } else 
+            {
+                // 类型不匹配：置空指针，触发后续崩溃报错
+                rcs_print("can\'t extract a Task instance out of '%s'\n", instance_name);
+                task_methods = NULL;
+            }
+        } 
+        catch(bp::error_already_set &) 
+        {
+            // 捕获Python脚本异常（语法错误、导入失败、运行时报错）
+            std::string msg = handle_pyerror();
+            if (emc_debug & EMC_DEBUG_PYTHON_TASK) 
+            {
+                // this really just means the task python backend wasn't configured.
+                rcs_print("emcTaskOnce: extract(%s): %s\n", instance_name, msg.c_str());
+            }
+            PyErr_Clear();
+        }
+    }
+
  no_pytask:
-    if (task_methods == NULL) {
-	if (emc_debug & EMC_DEBUG_PYTHON_TASK) {
-	    rcs_print("emcTaskOnce: no Python Task() instance available, using default iocontrol-based task methods\n");
-	}
-	task_methods = new Task();
+    if (task_methods == NULL) 
+    {
+        if (emc_debug & EMC_DEBUG_PYTHON_TASK) 
+        {
+            rcs_print("emcTaskOnce: no Python Task() instance available, using default iocontrol-based task methods\n");
+        }
+        // 兜底创建原生C++标准Task实现
+        task_methods = new Task();
     }
     return 0;
 }
 
 // If using a Python-based HAL module in task, normal HAL_FILE's are run too early.
 // Execute those here if specified via POSTTASK_HALFILE in INI.
+// 如果在 task 进程内部使用 Python 开发的 HAL 模块，INI 里常规 HAL_FILE 加载时机过早（Python 解释器还未初始化，模块加载会失败）；
+// 本函数专门读取 INI [HAL] 段下 POSTTASK_HALFILE 配置，在 Task、Python 环境完全初始化完成后再执行 HAL 脚本。
 int emcRunHalFiles(const char *filename)
 {
     IniFile inifile;
@@ -361,22 +393,38 @@ int emcRunHalFiles(const char *filename)
     int n = 1;
     pid_t pid;
 
-    if (inifile.Open(filename) == false) {
-	return -1;
+    // 打开失败直接返回 -1
+    if (inifile.Open(filename) == false) 
+    {
+        return -1;
     }
-    while (NULL != (inistring = inifile.Find("POSTTASK_HALFILE", "HAL",
-					     n, &lineno))) {
-	if ((pid = vfork()) < 0)
-	    perror("vfork()");
-	else if (pid == 0) {
-	    execlp("halcmd", "halcmd","-i",filename,"-f",inistring, NULL);
-	    perror("execlp halcmd");
-	} else {
-	    if ((waitpid (pid, &status, 0) == pid) &&  WEXITSTATUS(status))
-		rcs_print("'halcmd -i %s -f %s' exited with  %d\n",
-		       filename, inistring, WEXITSTATUS(status));
-	}
-	n++;
+
+    // 读取 [HAL] 下多条 POSTTASK_HALFILE = xxx.hal，支持多文件
+    // 每条配置都会创建一个子进程，调用 halcmd -i <ini> -f <halfile> 执行 HAL 脚本
+    // 通过halcmd，执行读到的所有 XXX.hal文件
+    while (NULL != (inistring = inifile.Find("POSTTASK_HALFILE", "HAL", n, &lineno))) 
+    {
+        // 轻量级进程创建
+        if ((pid = vfork()) < 0)
+        {
+            perror("vfork()");
+        }
+        else if (pid == 0)
+        {
+            // 子进程：调用halcmd执行HAL脚本
+            execlp("halcmd", "halcmd","-i",filename,"-f",inistring, NULL);
+            perror("execlp halcmd");
+            rcs_print_error("!!!!!Has Read %s\n", filename);
+        } 
+        else 
+        {
+            // 父进程：等待子进程执行完成，打印退出码
+            if ((waitpid (pid, &status, 0) == pid) &&  WEXITSTATUS(status))
+            {
+                rcs_print("'halcmd -i %s -f %s' exited with  %d\n", filename, inistring, WEXITSTATUS(status));
+            }
+        }
+        n++;
     }
     return 0;
 }

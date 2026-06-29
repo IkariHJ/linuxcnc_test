@@ -3149,129 +3149,194 @@ static int iniLoad(const char *filename)
     double saveDouble;
     int saveInt;
 
-    // open it
-    if (inifile.Open(filename) == false) {
-	return -1;
+    // 打开失败直接返回 -1
+    if (inifile.Open(filename) == false) 
+	{
+		return -1;
     }
 
-    if (NULL != (inistring = inifile.Find("DEBUG", "EMC"))) {
-	// copy to global
-	if (1 != sscanf(inistring, "%i", &emc_debug)) {
-	    emc_debug = 0;
+	// 解析 [EMC] DEBUG 调试开关
+    if (NULL != (inistring = inifile.Find("DEBUG", "EMC"))) 
+	{
+		// copy to global
+		if (1 != sscanf(inistring, "%i", &emc_debug)) 
+		{
+			emc_debug = 0;
+		}
+    } 
+	else 
+	{
+		// not found, use default
+		emc_debug = 0;
+    }
+
+	// RCS/NML 通信全量日志
+    if (emc_debug & EMC_DEBUG_RCS) 
+	{
+		// set_rcs_print_flag(PRINT_EVERYTHING);
+		max_rcs_errors_to_print = -1;
+    }
+
+	// 打印机床版本、机型信息
+    if (emc_debug & EMC_DEBUG_VERSIONS) 
+	{
+		if (NULL != (inistring = inifile.Find("VERSION", "EMC"))) 
+		{
+			if(sscanf(inistring, "$Revision: %s", version) != 1) 
+			{
+				rtapi_strlcpy(version, "unknown", LINELEN-1);
+			}
+		} 
+		else 
+		{
+			rtapi_strlcpy(version, "unknown", LINELEN-1);
+		}
+
+		if (NULL != (inistring = inifile.Find("MACHINE", "EMC"))) 
+		{
+			rtapi_strlcpy(machine, inistring, LINELEN-1);
+		} 
+		else 
+		{
+			rtapi_strlcpy(machine, "unknown", LINELEN-1);
+		}
+		rcs_print("task: machine: '%s'  version '%s'\n", machine, version);
 	}
-    } else {
-	// not found, use default
-	emc_debug = 0;
-    }
-    if (emc_debug & EMC_DEBUG_RCS) {
-	// set_rcs_print_flag(PRINT_EVERYTHING);
-	max_rcs_errors_to_print = -1;
-    }
 
-    if (emc_debug & EMC_DEBUG_VERSIONS) {
-	if (NULL != (inistring = inifile.Find("VERSION", "EMC"))) {
-	    if(sscanf(inistring, "$Revision: %s", version) != 1) {
-		rtapi_strlcpy(version, "unknown", LINELEN-1);
-	    }
-	} else {
-	    rtapi_strlcpy(version, "unknown", LINELEN-1);
-	}
-
-	if (NULL != (inistring = inifile.Find("MACHINE", "EMC"))) {
-	    rtapi_strlcpy(machine, inistring, LINELEN-1);
-	} else {
-	    rtapi_strlcpy(machine, "unknown", LINELEN-1);
-	}
-	rcs_print("task: machine: '%s'  version '%s'\n", machine, version);
+	// 解析 [EMC] NML_FILE 配置项，获取 NML 文件路径
+	// 该配置项用于指定 NML 文件的路径，NML 文件用于定义实时通信的格式和参数
+	// 定义 task 进程与 GUI/motion 交互的 NML 共享内存文件名，是机床进程间通信核心配置
+	// 共享内存是个文件？？？还有文件名？？？
+    if (NULL != (inistring = inifile.Find("NML_FILE", "EMC"))) 
+	{
+		// copy to global
+		rtapi_strxcpy(emc_nmlfile, inistring);
+    } 
+	else 
+	{
+		// not found, use default
     }
 
-    if (NULL != (inistring = inifile.Find("NML_FILE", "EMC"))) {
-	// copy to global
-	rtapi_strxcpy(emc_nmlfile, inistring);
-    } else {
-	// not found, use default
-    }
-
+	// 解析 [TASK] INTERP_MAX_LEN 配置项，获取插补器最大长度
+	// G代码缓存长度
+	// 单次最大译码长度
     saveInt = emc_task_interp_max_len; //remember default or previously set value
-    if (NULL != (inistring = inifile.Find("INTERP_MAX_LEN", "TASK"))) {
-	if (1 == sscanf(inistring, "%d", &emc_task_interp_max_len)) {
-	    if (emc_task_interp_max_len <= 0) {
-	    	emc_task_interp_max_len = saveInt;
-	    }
-	} else {
-	    emc_task_interp_max_len = saveInt;
-	}
+    if (NULL != (inistring = inifile.Find("INTERP_MAX_LEN", "TASK"))) 
+	{
+		if (1 == sscanf(inistring, "%d", &emc_task_interp_max_len)) 
+		{
+			if (emc_task_interp_max_len <= 0) 
+			{
+				emc_task_interp_max_len = saveInt;
+			}
+		} 
+		else 
+		{
+			emc_task_interp_max_len = saveInt;
+		}
     }
 
-    if (NULL != (inistring = inifile.Find("RS274NGC_STARTUP_CODE", "RS274NGC"))) {
-	// copy to global
-	rtapi_strxcpy(rs274ngc_startup_code, inistring);
-    } else {
-	//FIXME-AJ: this is the old (unpreferred) location. just for compatibility purposes
-	//it will be dropped in v2.4
-	if (NULL != (inistring = inifile.Find("RS274NGC_STARTUP_CODE", "EMC"))) {
-	    // copy to global
-	    rtapi_strxcpy(rs274ngc_startup_code, inistring);
-	} else {
-	// not found, use default
-	}
+	// 解析 [RS274NGC] RS274NGC_STARTUP_CODE 配置项，获取启动代码
+	// 机床开机自动执行的 G 代码文件路径
+    if (NULL != (inistring = inifile.Find("RS274NGC_STARTUP_CODE", "RS274NGC"))) 
+	{
+		// copy to global
+		rtapi_strxcpy(rs274ngc_startup_code, inistring);
+    } 
+	else 
+	{
+		//FIXME-AJ: this is the old (unpreferred) location. just for compatibility purposes
+		//it will be dropped in v2.4
+		// 这一段应该是在做兼容（INI结构发生改变）
+		if (NULL != (inistring = inifile.Find("RS274NGC_STARTUP_CODE", "EMC"))) 
+		{
+			// copy to global
+			rtapi_strxcpy(rs274ngc_startup_code, inistring);
+		} 
+		else 
+		{
+			// not found, use default
+		}
     }
+
+
     saveDouble = emc_task_cycle_time;
     EMC_TASK_CYCLE_TIME_ORIG = emc_task_cycle_time;
     emcTaskNoDelay = 0;
-    if (NULL != (inistring = inifile.Find("CYCLE_TIME", "TASK"))) {
-	if (1 == sscanf(inistring, "%lf", &emc_task_cycle_time)) {
-	    // found it
-	    // if it's <= 0.0, then flag that we don't want to
-	    // wait at all, which will set the EMC_TASK_CYCLE_TIME
-	    // global to the actual time deltas
-	    if (emc_task_cycle_time <= 0.0) {
-		emcTaskNoDelay = 1;
-	    }
-	} else {
-	    // found, but invalid
-	    emc_task_cycle_time = saveDouble;
-	    rcs_print
-		("invalid [TASK] CYCLE_TIME in %s (%s); using default %f\n",
-		 filename, inistring, emc_task_cycle_time);
-	}
-    } else {
-	// not found, using default
-	rcs_print("[TASK] CYCLE_TIME not found in %s; using default %f\n",
-		  filename, emc_task_cycle_time);
+	// 解析 [TASK] CYCLE_TIME Task 运行周期
+    if (NULL != (inistring = inifile.Find("CYCLE_TIME", "TASK"))) 
+	{
+		if (1 == sscanf(inistring, "%lf", &emc_task_cycle_time)) {
+			// found it
+			// if it's <= 0.0, then flag that we don't want to
+			// wait at all, which will set the EMC_TASK_CYCLE_TIME
+			// global to the actual time deltas
+			if (emc_task_cycle_time <= 0.0)
+			{
+				// 无阻塞模式，不做周期等待
+				emcTaskNoDelay = 1;
+			}
+		} 
+		else 
+		{
+			// 非法数值/未配置，恢复默认周期并打印告警日志 
+			// found, but invalid
+			emc_task_cycle_time = saveDouble;
+			rcs_print("invalid [TASK] CYCLE_TIME in %s (%s); using default %f\n", filename, inistring, emc_task_cycle_time);
+		}
+    } 
+	else 
+	{
+		// not found, using default
+		rcs_print("[TASK] CYCLE_TIME not found in %s; using default %f\n",
+			filename, emc_task_cycle_time);
     }
 
-
-    if (NULL != (inistring = inifile.Find("NO_FORCE_HOMING", "TRAJ"))) {
-	if (1 == sscanf(inistring, "%d", &no_force_homing)) {
-	    // found it
-	    // if it's <= 0.0, then set it 0 so that homing is required before MDI or Auto
-	    if (no_force_homing <= 0) {
+	// 解析 [TRAJ] NO_FORCE_HOMING 回零强制开关
+	// no_force_homing=0：开机未执行回零，禁止运行 G 代码、MDI；
+	// no_force_homing=1：跳过强制回零校验，适合调试场景。
+    if (NULL != (inistring = inifile.Find("NO_FORCE_HOMING", "TRAJ"))) 
+	{
+		if (1 == sscanf(inistring, "%d", &no_force_homing)) 
+		{
+			// found it
+			// if it's <= 0.0, then set it 0 so that homing is required before MDI or Auto
+			if (no_force_homing <= 0) 
+			{
+				// 开机未执行回零，禁止运行 G 代码、MDI；
+				no_force_homing = 0;
+			}
+		} 
+		else 
+		{
+			// found, but invalid
+			no_force_homing = 0;
+			rcs_print ("invalid [TRAJ] NO_FORCE_HOMING in %s (%s); using default %d\n", filename, inistring, no_force_homing);
+		}
+    } 
+	else 
+	{
+		// not found, using default
 		no_force_homing = 0;
-	    }
-	} else {
-	    // found, but invalid
-	    no_force_homing = 0;
-	    rcs_print
-		("invalid [TRAJ] NO_FORCE_HOMING in %s (%s); using default %d\n",
-		 filename, inistring, no_force_homing);
-	}
-    } else {
-	// not found, using default
-	no_force_homing = 0;
     }
+
 
     // configurable template for iocontrol reason display
-    if (NULL != (inistring = inifile.Find("IO_ERROR", "TASK"))) {
-	io_error = strdup(inistring);
+	// 解析 [TASK] IO_ERROR 配置项，获取 IOCONTROL 错误显示模板(IO 故障弹窗提示模板字符串)
+    if (NULL != (inistring = inifile.Find("IO_ERROR", "TASK"))) 
+	{
+		io_error = strdup(inistring);
     }
 
     // max number of queued MDI commands
-    if (NULL != (inistring = inifile.Find("MDI_QUEUED_COMMANDS", "TASK"))) {
-	max_mdi_queued_commands = atoi(inistring);
+	// 解析 [TASK] MDI_QUEUED_COMMANDS 配置项，获取最大排队 MDI 命令数(控制手动指令积压上限)
+    if (NULL != (inistring = inifile.Find("MDI_QUEUED_COMMANDS", "TASK"))) 
+	{
+		max_mdi_queued_commands = atoi(inistring);
     }
 
     // close it
+	// 关闭INI文件句柄
     inifile.Close();
 
     return 0;
@@ -3363,6 +3428,15 @@ int main(int argc, char *argv[])
 	// 读取配置文件，初始化emc_inifile全局变量
 	// 加载INI文件
 	// emc_inifile由此函数解析得出 : emcGetArgs(argc, argv)
+	// DEBUG 调试开关
+	// VERSION / MACHINE 机型版本信息
+	// NML_FILE 配置项
+	// INTERP_MAX_LEN 配置项
+	// RS274NGC_STARTUP_CODE 配置项
+	// CYCLE_TIME 配置项
+	// NO_FORCE_HOMING 配置项
+	// IO_ERROR 配置项
+	// MDI_QUEUED_COMMANDS 配置项
     iniLoad(emc_inifile);
 
 	// 检测全局退出标记done，若已置位则执行关机并异常退出
@@ -3379,25 +3453,42 @@ int main(int argc, char *argv[])
 	// EMC_STAT结构体状态信息 : IO、TASK、MOTION
     emcStatus = new EMC_STAT;
 
-#ifdef TOOL_NML //{
+#ifdef TOOL_NML 
+	// NML消息式刀具通信模式
     tool_nml_register( (CANON_TOOL_TABLE*)&emcStatus->io.tool.toolTable);
-#else //}{
+#else 
+	// 共享内存mmap刀具通信模式
     tool_mmap_user();
     // initialize database tool finder:
-#endif //}
-    // get the Python plugin going
+	// 初始化刀具数据库检索器
+	// 后面为啥啥也没有???
+#endif 
 
+
+    // get the Python plugin going
     // inistantiate task methods object, too
+	// 未知作用，网络解释为: 
+	// 1.是 CNC 任务调度层，主管 G 代码加工流程，仅作为 PLC 的上层指令下发器, 是G 代码任务调度层
+	// 2.G代码 → Task Python（你这段代码）→ 下发运动/IO指令 → Classic Ladder PLC（实时逻辑）→ HAL硬件IO
+	// 为啥会是Python???
     emcTaskOnce(emc_inifile);
+
+	//拷贝INI文件，应该是供其他地方使用
     rtapi_strxcpy(emcStatus->task.ini_filename, emc_inifile);
-    if (task_methods == NULL) {
-	set_rcs_print_destination(RCS_PRINT_TO_STDOUT);	// restore diag
-	rcs_print_error("can't initialize Task methods\n");
-	emctask_shutdown();
-	exit(1);
+
+	// emcTaskOnce()函数中，初始化emcStatus->task.methods
+	// emcStatus->task.methods是一个函数指针结构体
+    if (task_methods == NULL) 
+	{
+		// restore diag
+		set_rcs_print_destination(RCS_PRINT_TO_STDOUT);	
+		rcs_print_error("can't initialize Task methods\n");
+		emctask_shutdown();
+		exit(1);
     }
 
     // this is the place to run any post-HAL-creation halcmd files
+	// 运行HAL配置文件 POSTTASK_HALFILE = XXX.hal
     emcRunHalFiles(emc_inifile);
 
     // initialize everything
