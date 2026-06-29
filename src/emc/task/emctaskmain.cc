@@ -3290,50 +3290,93 @@ int main(int argc, char *argv[])
     int latency_excursion_factor = 10;  // if latency is worse than (factor * expected), it's an excursion
     double minTime, maxTime;
 
+	// 未知功能
     bindtextdomain("linuxcnc", EMC2_PO_DIR);
     setlocale(LC_MESSAGES,"");
     setlocale(LC_CTYPE,"");
     textdomain("linuxcnc");
 
     // loop until done
+	// 进入Task主While循环用的，标识位
     done = 0;
+
     // trap ^C
+	// 正常退出信号绑定
+	// Ctrl+C 交互式中断信号
     signal(SIGINT, emctask_quit);
+
     // and SIGTERM (used by runscript to shut down)
+	// 正常退出信号绑定
+	// 正常终止请求（系统/脚本下发关闭指令）
     signal(SIGTERM, emctask_quit);
 
     // create a backtrace on stderr
+	// 崩溃异常信号绑定
+	// 段错误，非法内存访问
     signal(SIGSEGV, backtrace);
+
+	// 崩溃异常信号绑定 
+	// 浮点运算错误（除零、溢出）
     signal(SIGFPE, backtrace);
+
+	// 崩溃异常信号绑定
+	// 运行时发送 
+	// kill -SIGUSR1 emctask
+	// 无需关闭机床任务进程，直接输出当前完整函数调用栈；
+	// 定位场景：G 代码卡死、HAL 阻塞、实时调度死循环，是 LinuxCNC 内核核心调试手段。
     signal(SIGUSR1, backtrace);
 
     // set print destination to stdout, for console apps
+	// 控制台程序日志输出定向到标准输出
     set_rcs_print_destination(RCS_PRINT_TO_STDOUT);
+
     // process command line args
-    if (0 != emcGetArgs(argc, argv)) {
-	rcs_print_error("error in argument list\n");
-	exit(1);
+	// 解析启动命令行参数
+	// 参数包含:
+	// -ini
+	// -rcsdebug
+	// -queryhost
+	// -host
+	// 好像是配合emctask指令用的，不是linuxcnc指令
+    if (0 != emcGetArgs(argc, argv)) 
+	{
+		rcs_print_error("error in argument list\n");
+		exit(1);
     }
 
-    if (done) {
-	emctask_shutdown();
-	exit(1);
+	// 检测全局退出标记done，若已置位则执行关机并异常退出
+    if (done) 
+	{
+		emctask_shutdown();
+		exit(1);
     }
 
-    if (done) {
-	emctask_shutdown();
-	exit(1);
+	// 检测全局退出标记done，若已置位则执行关机并异常退出
+	// 不知道为啥写两次?????
+    if (done) 
+	{
+		emctask_shutdown();
+		exit(1);
     }
+
     // get configuration information
+	// 读取配置文件，初始化emc_inifile全局变量
+	// 加载INI文件
+	// emc_inifile由此函数解析得出 : emcGetArgs(argc, argv)
     iniLoad(emc_inifile);
 
-    if (done) {
-	emctask_shutdown();
-	exit(1);
+	// 检测全局退出标记done，若已置位则执行关机并异常退出
+    if (done) 
+	{
+		emctask_shutdown();
+		exit(1);
     }
 
     // get our status data structure
     // moved up from emc_startup so we can expose it in Python right away
+	// 获取状态数据结构
+	// 这里是emcStatus的初始化，emcStatus是一个全局变量,后续所有的状态信息都通过emcStatus来传递
+	// EMC_STAT结构体状态信息 : IO、TASK、MOTION
     emcStatus = new EMC_STAT;
 
 #ifdef TOOL_NML //{
