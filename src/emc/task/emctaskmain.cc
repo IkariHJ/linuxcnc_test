@@ -2874,228 +2874,386 @@ static int emcTaskExecute(void)
 }
 
 // called to allocate and init resources
+// returns 0 : success, -1 : failure
+// 依次创建三大 NML 共享内存通信通道（指令 / 状态 / 报错）；
+// 初始化 IO、motion 运动、G 代码解释器、Task 业务层；
+// 带超时重试机制（总等待 10s，1s 重试一次），任一模块 10s 内初始化失败，直接关闭资源、返回-1，上层触发exit(1)整机退出。
 static int emctask_startup()
 {
     double end;
     int good;
 
+// 单模块最长等待总时长：10秒
 #define RETRY_TIME 10.0		// seconds to wait for subsystems to come up
+// 每次重试间隔：1秒
 #define RETRY_INTERVAL 1.0	// seconds between wait tries for a subsystem
 
     // moved up so it can be exposed in taskmodule at init time
-    // // get our status data structure
+	// 向上移动，以便在初始化时在taskmodule中暴露出来
+    // get our status data structure
+	// 获取我们的状态数据结构
     // emcStatus = new EMC_STAT;
 
     // get the NML command buffer
-    if (!(emc_debug & EMC_DEBUG_NML)) {
-	set_rcs_print_destination(RCS_PRINT_TO_NULL);	// inhibit diag
-	// messages
+	// 非NML调试模式时，临时屏蔽冗余日志
+    if (!(emc_debug & EMC_DEBUG_NML)) 
+	{
+		set_rcs_print_destination(RCS_PRINT_TO_NULL);	// inhibit diag
+		// messages
     }
+
+
+	/////////////////////////////////////// 阶段 1：创建 NML 指令通道 emcCommandBuffer ///////////////////////////////////////
+
     end = RETRY_TIME;
     good = 0;
-    do {
-	if (NULL != emcCommandBuffer) {
-	    delete emcCommandBuffer;
-	}
-	emcCommandBuffer =
-	    new RCS_CMD_CHANNEL(emcFormat, "emcCommand", "emc",
-				emc_nmlfile);
-	if (emcCommandBuffer->valid()) {
-	    good = 1;
-	    break;
-	}
-	esleep(RETRY_INTERVAL);
-	end -= RETRY_INTERVAL;
-	if (done) {
-	    emctask_shutdown();
-	    exit(1);
-	}
-    } while (end > 0.0);
+    do 
+	{
+		// 先释放旧缓冲区，防止内存泄漏
+		if (NULL != emcCommandBuffer) 
+		{
+			delete emcCommandBuffer;
+		}
+
+		// 基于emc_nmlfile（.nml配置文件）创建NML命令共享内存通道
+		emcCommandBuffer = new RCS_CMD_CHANNEL(emcFormat, "emcCommand", "emc", emc_nmlfile);
+		if (emcCommandBuffer->valid()) 
+		{
+			good = 1;
+			break;
+		}
+		esleep(RETRY_INTERVAL);
+		end -= RETRY_INTERVAL;
+
+		// 检测全局退出标记done，若已置位则执行关机并异常退出
+		if (done) 
+		{
+			emctask_shutdown();
+			exit(1);
+		}
+    } 
+	while (end > 0.0);
+
+	// 恢复日志输出到终端
     set_rcs_print_destination(RCS_PRINT_TO_STDOUT);	// restore diag
+
     // messages
-    if (!good) {
-	rcs_print_error("can't get emcCommand buffer\n");
-	return -1;
+	// 创建NML命令共享内存通道失败
+	// 直接退出
+    if (!good) 
+	{
+		rcs_print_error("can't get emcCommand buffer\n");
+		return -1;
     }
+
     // get our command data structure
+	// 获取命令数据结构
+	// 获取共享内存数据区指针，全局emcCommand = 指令消息结构体
     emcCommand = emcCommandBuffer->get_address();
 
+	/////////////////////////////////////// 阶段 1：创建 NML 指令通道 emcCommandBuffer ///////////////////////////////////////
+
     // get the NML status buffer
-    if (!(emc_debug & EMC_DEBUG_NML)) {
-	set_rcs_print_destination(RCS_PRINT_TO_NULL);	// inhibit diag
-	// messages
-    }
-    end = RETRY_TIME;
-    good = 0;
-    do {
-	if (NULL != emcStatusBuffer) {
-	    delete emcStatusBuffer;
-	}
-	emcStatusBuffer =
-	    new RCS_STAT_CHANNEL(emcFormat, "emcStatus", "emc",
-				 emc_nmlfile);
-	if (emcStatusBuffer->valid()) {
-	    good = 1;
-	    break;
-	}
-	esleep(RETRY_INTERVAL);
-	end -= RETRY_INTERVAL;
-	if (done) {
-	    emctask_shutdown();
-	    exit(1);
-	}
-    } while (end > 0.0);
-    set_rcs_print_destination(RCS_PRINT_TO_STDOUT);	// restore diag
-    // messages
-    if (!good) {
-	rcs_print_error("can't get emcStatus buffer\n");
-	return -1;
+	// 非NML调试模式时，临时屏蔽冗余日志
+    if (!(emc_debug & EMC_DEBUG_NML)) 
+	{
+		set_rcs_print_destination(RCS_PRINT_TO_NULL);	// inhibit diag
+		// messages
     }
 
-    if (!(emc_debug & EMC_DEBUG_NML)) {
-	set_rcs_print_destination(RCS_PRINT_TO_NULL);	// inhibit diag
-	// messages
-    }
+	/////////////////////////////////////// 阶段 2：创建 NML 状态通道 emcStatusBuffer ///////////////////////////////////////
+
     end = RETRY_TIME;
     good = 0;
-    do {
-	if (NULL != emcErrorBuffer) {
-	    delete emcErrorBuffer;
-	}
-	emcErrorBuffer =
-	    new NML(nmlErrorFormat, "emcError", "emc", emc_nmlfile);
-	if (emcErrorBuffer->valid()) {
-	    good = 1;
-	    break;
-	}
-	esleep(RETRY_INTERVAL);
-	end -= RETRY_INTERVAL;
-	if (done) {
-	    emctask_shutdown();
-	    exit(1);
-	}
-    } while (end > 0.0);
+    do 
+	{
+		// 先释放旧缓冲区，防止内存泄漏
+		if (NULL != emcStatusBuffer) 
+		{
+			delete emcStatusBuffer;
+		}
+
+		// 基于emc_nmlfile（.nml配置文件）创建NML状态共享内存通道
+		emcStatusBuffer = new RCS_STAT_CHANNEL(emcFormat, "emcStatus", "emc", emc_nmlfile);
+		if (emcStatusBuffer->valid()) 
+		{
+			good = 1;
+			break;
+		}
+		esleep(RETRY_INTERVAL);
+		end -= RETRY_INTERVAL;
+
+		// 检测全局退出标记done，若已置位则执行关机并异常退出
+		if (done) 
+		{
+			emctask_shutdown();
+			exit(1);
+		}
+    } 
+	while (end > 0.0);
+
+	// 恢复日志输出到终端
     set_rcs_print_destination(RCS_PRINT_TO_STDOUT);	// restore diag
+
     // messages
-    if (!good) {
-	rcs_print_error("can't get emcError buffer\n");
-	return -1;
+	// 创建NML状态共享内存通道失败
+	// 直接退出
+    if (!good) 
+	{
+		rcs_print_error("can't get emcStatus buffer\n");
+		return -1;
     }
+
+	/////////////////////////////////////// 阶段 2：创建 NML 状态通道 emcStatusBuffer ///////////////////////////////////////
+
+	// 非NML调试模式时，临时屏蔽冗余日志
+    if (!(emc_debug & EMC_DEBUG_NML)) 
+	{
+		set_rcs_print_destination(RCS_PRINT_TO_NULL);	// inhibit diag
+		// messages
+    }
+
+	/////////////////////////////////////// 阶段 3：创建 NML 报错通道 emcErrorBuffer ///////////////////////////////////////
+
+    end = RETRY_TIME;
+    good = 0;
+    do 
+	{
+		// 先释放旧缓冲区，防止内存泄漏
+		if (NULL != emcErrorBuffer) 
+		{
+			delete emcErrorBuffer;
+		}
+		// 基于emc_nmlfile（.nml配置文件）创建NML报错共享内存通道
+		emcErrorBuffer = new NML(nmlErrorFormat, "emcError", "emc", emc_nmlfile);
+		if (emcErrorBuffer->valid()) 
+		{
+			good = 1;
+			break;
+		}
+		esleep(RETRY_INTERVAL);
+		end -= RETRY_INTERVAL;
+
+		// 检测全局退出标记done，若已置位则执行关机并异常退出
+		if (done) 
+		{
+			emctask_shutdown();
+			exit(1);
+		}
+    } 
+	while (end > 0.0);
+
+	// 恢复日志输出到终端
+    set_rcs_print_destination(RCS_PRINT_TO_STDOUT);	// restore diag
+
+    // messages
+	// 创建NML报错共享内存通道失败
+	// 直接退出
+    if (!good) 
+	{
+		rcs_print_error("can't get emcError buffer\n");
+		return -1;
+    }
+
+	/////////////////////////////////////// 阶段 3：创建 NML 报错通道 emcErrorBuffer ///////////////////////////////////////
+
+	/////////////////////////////////////// 阶段 4：创建 Task 周期定时器 ///////////////////////////////////////
+
     // get the timer
-    if (!emcTaskNoDelay) {
-	timer = new RCS_TIMER(emc_task_cycle_time, "", "");
+	// emcTaskNoDelay 来自 INI [TASK] CYCLE_TIME
+	// "CYCLE_TIME", "TASK"
+	// ≤0 时开启无延迟全速运行；
+	// >0 时开启定时器，周期为 CYCLE_TIME 秒
+    if (!emcTaskNoDelay)
+	{
+		timer = new RCS_TIMER(emc_task_cycle_time, "", "");
     }
+
+	/////////////////////////////////////// 阶段 4：创建 Task 周期定时器 ///////////////////////////////////////
+
     // initialize the subsystems
+	// 初始化子系统
 
     // IO first
+	/////////////////////////////////////// 阶段 5：IO 子系统初始化 ///////////////////////////////////////
 
-    if (!(emc_debug & EMC_DEBUG_NML)) {
-	set_rcs_print_destination(RCS_PRINT_TO_NULL);	// inhibit diag
-	// messages
+	// 非NML调试模式时，临时屏蔽冗余日志
+    if (!(emc_debug & EMC_DEBUG_NML)) 
+	{
+		set_rcs_print_destination(RCS_PRINT_TO_NULL);	// inhibit diag
+		// messages
     }
+
     end = RETRY_TIME;
     good = 0;
-    do {
-	if (0 == emcIoInit()) {
-	    good = 1;
-	    break;
-	}
-	esleep(RETRY_INTERVAL);
-	end -= RETRY_INTERVAL;
-	if (done) {
-	    emctask_shutdown();
-	    exit(1);
-	}
-    } while (end > 0.0);
+    do 
+	{
+		// 初始化 HAL IO 
+		if (0 == emcIoInit()) 
+		{
+			good = 1;
+			break;
+		}
+		esleep(RETRY_INTERVAL);
+		end -= RETRY_INTERVAL;
+
+		// 检测全局退出标记done，若已置位则执行关机并异常退出
+		if (done) 
+		{
+			emctask_shutdown();
+			exit(1);
+		}
+    } 
+	while (end > 0.0);
+
+	// 恢复日志输出到终端
     set_rcs_print_destination(RCS_PRINT_TO_STDOUT);	// restore diag
+
     // messages
-    if (!good) {
-	rcs_print_error("can't initialize IO\n");
-	return -1;
+	// 初始化 HAL IO 失败
+	// 直接退出
+    if (!good) 
+	{
+		rcs_print_error("can't initialize IO\n");
+		return -1;
     }
+
 
     end = RETRY_TIME;
     good = 0;
-    do {
-	if (0 == emcIoUpdate(&emcStatus->io)) {
-	    good = 1;
-	    break;
-	}
-	esleep(RETRY_INTERVAL);
-	end -= RETRY_INTERVAL;
-	if (done) {
-	    emctask_shutdown();
-	    exit(1);
-	}
-    } while (end > 0.0);
-    if (!good) {
-	rcs_print_error("can't read IO status\n");
-	return -1;
+    do 
+	{
+		// 同步 IO 硬件状态到全局共享内存emcStatus
+		if (0 == emcIoUpdate(&emcStatus->io)) 
+		{
+			good = 1;
+			break;
+		}
+		esleep(RETRY_INTERVAL);
+		end -= RETRY_INTERVAL;
+
+		// 检测全局退出标记done，若已置位则执行关机并异常退出
+		if (done) 
+		{
+			emctask_shutdown();
+			exit(1);
+		}
+    } 
+	while (end > 0.0);
+
+    // messages
+	// 同步 IO 硬件状态到全局共享内存失败
+	// 直接退出
+    if (!good) 
+	{
+		rcs_print_error("can't read IO status\n");
+		return -1;
     }
 
+	/////////////////////////////////////// 阶段 5：IO 子系统初始化 ///////////////////////////////////////
 
     // now motion
+	/////////////////////////////////////// 阶段 6：motion 运动子系统初始化 ///////////////////////////////////////
 
     end = RETRY_TIME;
     good = 0;
-    do {
-	if (0 == emcMotionInit()) {
-	    good = 1;
-	    break;
-	}
-	esleep(RETRY_INTERVAL);
-	end -= RETRY_INTERVAL;
-	if (done) {
-	    emctask_shutdown();
-	    exit(1);
-	}
-    } while (end > 0.0);
-    if (!good) {
-	rcs_print_error("can't initialize motion\n");
-	return -1;
+    do 
+	{
+		// 打通 task 与 motion 实时进程通信管道，初始化轨迹规划、轴伺服接口
+		if (0 == emcMotionInit()) 
+		{
+			good = 1;
+			break;
+		}
+		esleep(RETRY_INTERVAL);
+		end -= RETRY_INTERVAL;
+
+		// 检测全局退出标记done，若已置位则执行关机并异常退出
+		if (done) 
+		{
+			emctask_shutdown();
+			exit(1);
+		}
+    } 
+	while (end > 0.0);
+
+    // messages
+	// 打通 task 与 motion 实时进程通信管道，初始化轨迹规划、轴伺服接口失败
+	// 直接退出
+    if (!good)
+	{
+		rcs_print_error("can't initialize motion\n");
+		return -1;
     }
 
-    if (setup_inihal() != 0) {
-	rcs_print_error("%s: failed to setup inihal\n", __FUNCTION__);
-	return -1;
+	// 初始化运动层 HAL 引脚绑定；
+    if (setup_inihal() != 0) 
+	{
+		rcs_print_error("%s: failed to setup inihal\n", __FUNCTION__);
+		return -1;
     }
 
     end = RETRY_TIME;
     good = 0;
-    do {
-	if (0 == emcMotionUpdate(&emcStatus->motion)) {
-	    good = 1;
-	    break;
-	}
-	esleep(RETRY_INTERVAL);
-	end -= RETRY_INTERVAL;
-	if (done) {
-	    emctask_shutdown();
-	    exit(1);
-	}
-    } while (end > 0.0);
-    if (!good) {
-	rcs_print_error("can't read motion status\n");
-	return -1;
+    do 
+	{
+		// 同步轴位置、主轴、轨迹状态到共享内存
+		if (0 == emcMotionUpdate(&emcStatus->motion)) 
+		{
+			good = 1;
+			break;
+		}
+		esleep(RETRY_INTERVAL);
+		end -= RETRY_INTERVAL;
+
+		// 检测全局退出标记done，若已置位则执行关机并异常退出
+		if (done) {
+			emctask_shutdown();
+			exit(1);
+		}
+    } 
+	while (end > 0.0);
+
+    if (!good) 
+	{
+		rcs_print_error("can't read motion status\n");
+		return -1;
     }
+
+	/////////////////////////////////////// 阶段 6：motion 运动子系统初始化 ///////////////////////////////////////
+
     // now the interpreter
+	/////////////////////////////////////// 阶段 7：G 代码解释器初始化 ///////////////////////////////////////
 
-    if (0 != emcTaskPlanInit()) {
-	rcs_print_error("can't initialize interpreter\n");
-	return -1;
+	// RS274NGC G 代码解释器、宏程序、循环逻辑初始化；
+    if (0 != emcTaskPlanInit()) 
+	{
+		rcs_print_error("can't initialize interpreter\n");
+		return -1;
     }
 
-    if (done ) {
-	emctask_shutdown();
-	exit(1);
+    if (done ) 
+	{
+		emctask_shutdown();
+		exit(1);
     }
+
+	/////////////////////////////////////// 阶段 7：G 代码解释器初始化 ///////////////////////////////////////
 
     // now task
-    if (0 != emcTaskInit()) {
-	rcs_print_error("can't initialize task\n");
-	return -1;
+	/////////////////////////////////////// 阶段 8：Task 业务层初始化 & 收尾 ///////////////////////////////////////
+
+	// 初始化换刀逻辑、程序加载、自动 / MDI 模式控制
+    if (0 != emcTaskInit()) 
+	{
+		rcs_print_error("can't initialize task\n");
+		return -1;
     }
+
+	// 同步 task 运行状态到共享内存
     emcTaskUpdate(&emcStatus->task);
+
+	/////////////////////////////////////// 阶段 8：Task 业务层初始化 & 收尾 ///////////////////////////////////////
 
     return 0;
 }
@@ -3492,10 +3650,22 @@ int main(int argc, char *argv[])
     emcRunHalFiles(emc_inifile);
 
     // initialize everything
-    if (0 != emctask_startup()) {
-	emctask_shutdown();
-	exit(1);
+	// 初始化所有子系统
+	// emctask_startup()函数中，初始化了NML通信、IO、MOTION、TASK等子系统
+	// 阶段 1：创建 NML 指令通道 emcCommandBuffer
+	// 阶段 2：创建 NML 状态通道 emcStatusBuffer
+	// 阶段 3：创建 NML 报错通道 emcErrorBuffer
+	// 阶段 4：创建 Task 周期定时器
+	// 阶段 5：IO 子系统初始化
+	// 阶段 6：motion 运动子系统初始化
+	// 阶段 7：G 代码解释器初始化
+	// 阶段 8：Task 业务层初始化 & 收尾
+    if (0 != emctask_startup()) 
+	{
+		emctask_shutdown();
+		exit(1);
     }
+
     // set the default startup modes
     emcMotionAbort();
     for (int s = 0; s < emcStatus->motion.traj.spindles; s++) emcSpindleAbort(s);
