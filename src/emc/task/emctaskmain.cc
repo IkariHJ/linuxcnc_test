@@ -3327,6 +3327,7 @@ static int iniLoad(const char *filename)
 		// not found, use default
 		emc_debug = 0;
     }
+	rcs_print("task: emc_debug: '%d' \n", emc_debug);
 
 	// RCS/NML 通信全量日志
     if (emc_debug & EMC_DEBUG_RCS) 
@@ -3748,212 +3749,250 @@ int main(int argc, char *argv[])
     }
 
 	// 无限主循环，机床运行全程不停
-    while (!done) {
+    while (!done) 
+	{
         static int gave_soft_limit_message = 0;
         check_ini_hal_items(emcStatus->motion.traj.joints);
-	// read command
-	if (0 != emcCommandBuffer->read()) {
-	    // got a new command, so clear out errors
-	    taskPlanError = 0;
-	    taskExecuteError = 0;
-	}
-	// run control cycle
-	if (0 != emcTaskPlan()) {
-	    taskPlanError = 1;
-	}
-	if (0 != emcTaskExecute()) {
-	    taskExecuteError = 1;
-	}
-	// update subordinate status
-
-	emcIoUpdate(&emcStatus->io);
-	emcMotionUpdate(&emcStatus->motion);
-	// synchronize subordinate states
-	if (emcStatus->io.aux.estop) {
-	    if (emcStatus->motion.traj.enabled) {
-		emcTrajDisable();
-		emcTaskAbort();
-        emcIoAbort(EMC_ABORT_AUX_ESTOP);
-        for (int s = 0; s < emcStatus->motion.traj.spindles; s++) emcSpindleAbort(s);
-        emcJointUnhome(-2); // only those joints which are volatile_home
-		mdi_execute_abort();
-		emcAbortCleanup(EMC_ABORT_AUX_ESTOP);
-		emcTaskPlanSynch();
-	    }
-	    if (emcStatus->io.coolant.mist) {
-		emcCoolantMistOff();
-	    }
-	    if (emcStatus->io.coolant.flood) {
-		emcCoolantFloodOff();
-	    }
-	    if (emcStatus->io.lube.on) {
-		emcLubeOff();
-	    }
-	    for (int n = 0; n < emcStatus->motion.traj.spindles; n++){
-	    	if (emcStatus->motion.spindle[n].enabled) {
-	    		emcSpindleOff(n);
-	    	}
-	    }
-	}
-
-	// toolchanger indicated fault code > 0
-	if ((emcStatus->io.status == RCS_ERROR) &&
-	    emcStatus->io.fault) {
-	    static int reported = -1;
-	    if (emcStatus->io.reason > 0) {
-		if (reported ^ emcStatus->io.fault) {
-		    rcs_print("M6: toolchanger soft fault=%d, reason=%d\n",
-			      emcStatus->io.fault, emcStatus->io.reason);
-		    reported = emcStatus->io.fault;
+		// read command
+		if (0 != emcCommandBuffer->read()) 
+		{
+			// got a new command, so clear out errors
+			taskPlanError = 0;
+			taskExecuteError = 0;
 		}
-		emcStatus->io.status = RCS_DONE; // let program continue
-	    } else {
-		rcs_print("M6: toolchanger hard fault, reason=%d\n",
-			  emcStatus->io.reason);
-		// abort since io.status is RCS_ERROR
-	    }
+		// run control cycle
+		if (0 != emcTaskPlan()) 
+		{
+			taskPlanError = 1;
+		}
+		if (0 != emcTaskExecute()) 
+		{
+			taskExecuteError = 1;
+		}
+		// update subordinate status
 
-	}
+		emcIoUpdate(&emcStatus->io);
+		emcMotionUpdate(&emcStatus->motion);
+		// synchronize subordinate states
+		if (emcStatus->io.aux.estop) 
+		{
+			if (emcStatus->motion.traj.enabled) 
+			{
+				emcTrajDisable();
+				emcTaskAbort();
+				emcIoAbort(EMC_ABORT_AUX_ESTOP);
+				for (int s = 0; s < emcStatus->motion.traj.spindles; s++) emcSpindleAbort(s);
+				emcJointUnhome(-2); // only those joints which are volatile_home
+				mdi_execute_abort();
+				emcAbortCleanup(EMC_ABORT_AUX_ESTOP);
+				emcTaskPlanSynch();
+			}
+			if (emcStatus->io.coolant.mist)
+			{
+				emcCoolantMistOff();
+			}
+			if (emcStatus->io.coolant.flood) 
+			{
+				emcCoolantFloodOff();
+			}
+			if (emcStatus->io.lube.on) 
+			{
+				emcLubeOff();
+			}
+			for (int n = 0; n < emcStatus->motion.traj.spindles; n++)
+			{
+				if (emcStatus->motion.spindle[n].enabled) 
+				{
+					emcSpindleOff(n);
+				}
+			}
+		}
 
-        if (!emcStatus->motion.on_soft_limit) {gave_soft_limit_message = 0;}
+		// toolchanger indicated fault code > 0
+		if ((emcStatus->io.status == RCS_ERROR) && emcStatus->io.fault) 
+		{
+			static int reported = -1;
+			if (emcStatus->io.reason > 0) 
+			{
+				if (reported ^ emcStatus->io.fault) 
+				{
+					rcs_print("M6: toolchanger soft fault=%d, reason=%d\n", emcStatus->io.fault, emcStatus->io.reason);
+					reported = emcStatus->io.fault;
+				}
+				emcStatus->io.status = RCS_DONE; // let program continue
+			} 
+			else 
+			{
+				rcs_print("M6: toolchanger hard fault, reason=%d\n", emcStatus->io.reason);
+				// abort since io.status is RCS_ERROR
+			}
 
-	// check for subordinate errors, and halt task if so
-        if (   emcStatus->motion.status == RCS_ERROR
-            && emcStatus->motion.on_soft_limit) { 
-           if (!gave_soft_limit_message) {
+		}
+
+        if (!emcStatus->motion.on_soft_limit) 
+		{
+			gave_soft_limit_message = 0;
+		}
+
+		// check for subordinate errors, and halt task if so
+        if (   emcStatus->motion.status == RCS_ERROR && emcStatus->motion.on_soft_limit) 
+		{ 
+           if (!gave_soft_limit_message) 
+		   {
                 emcOperatorError(0, "On Soft Limit");
                 // if gui does not provide a means to switch to joint mode
                 // the  machine may be stuck (a misconfiguration)
-                if (emcmotConfig.kinType == KINEMATICS_IDENTITY) {
+                if (emcmotConfig.kinType == KINEMATICS_IDENTITY) 
+				{
                     emcOperatorError(0,"Identity kinematics are MISCONFIGURED");
                 }
                 gave_soft_limit_message = 1;
            }
-        } else if (emcStatus->motion.status == RCS_ERROR ||
-	    ((emcStatus->io.status == RCS_ERROR) &&
-	     (emcStatus->io.reason <= 0))) {
-	    /*! \todo FIXME-- duplicate code for abort,
-	      also in emcTaskExecute()
-	      and in emcTaskIssueCommand() */
+        } 
+		else if (emcStatus->motion.status == RCS_ERROR || ((emcStatus->io.status == RCS_ERROR) && (emcStatus->io.reason <= 0))) 
+		{
+			/*! \todo FIXME-- duplicate code for abort,
+			also in emcTaskExecute()
+			and in emcTaskIssueCommand() */
 
-	    if (emcStatus->io.status == RCS_ERROR) {
-		// this is an aborted M6.
-		if (emc_debug & EMC_DEBUG_RCS ) {
-		    rcs_print("io.status=RCS_ERROR, fault=%d reason=%d\n",
-			      emcStatus->io.fault, emcStatus->io.reason);
+			if (emcStatus->io.status == RCS_ERROR) 
+			{
+				// this is an aborted M6.
+				if (emc_debug & EMC_DEBUG_RCS ) 
+				{
+					rcs_print("io.status=RCS_ERROR, fault=%d reason=%d\n", emcStatus->io.fault, emcStatus->io.reason);
+				}
+				if (emcStatus->io.reason < 0) 
+				{
+					emcOperatorError(0, io_error, emcStatus->io.reason);
+				}
+			}
+			// motion already should have reported this condition (and set RCS_ERROR?)
+			// an M19 orient failed to complete within timeout
+			// if ((emcStatus->motion.status == RCS_ERROR) && 
+			// 	(emcStatus->motion.spindle.orient_state == EMCMOT_ORIENT_FAULTED) &&
+			// 	(emcStatus->motion.spindle.orient_fault != 0)) {
+			// 	emcOperatorError(0, "wait for orient complete timed out");
+			// }
+
+			// abort everything
+			emcTaskAbort();
+			emcIoAbort(EMC_ABORT_MOTION_OR_IO_RCS_ERROR);
+			for (int s = 0; s < emcStatus->motion.traj.spindles; s++) 
+			{
+				emcSpindleAbort(s);;
+			}
+			mdi_execute_abort();
+			// without emcTaskPlanClose(), a new run command resumes at
+			// aborted line-- feature that may be considered later
+			{
+				int was_open = taskplanopen;
+				emcTaskPlanClose();
+				emcTaskPlanReset();  // Flush any unflushed segments
+				if (emc_debug & EMC_DEBUG_INTERP && was_open) 
+				{
+					rcs_print("emcTaskPlanClose() called at %s:%d\n", __FILE__, __LINE__);
+				}
+			}
+
+			// clear out the pending command
+			emcTaskCommand = 0;
+			interp_list.clear();
+			emcStatus->task.currentLine = 0;
+
+			emcAbortCleanup(EMC_ABORT_MOTION_OR_IO_RCS_ERROR);
+
+			// clear out the interpreter state
+			emcStatus->task.interpState = EMC_TASK_INTERP_IDLE;
+			emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+			stepping = 0;
+			steppingWait = 0;
+
+			// now queue up command to resynch interpreter
+			emcTaskQueueCommand(&taskPlanSynchCmd);
 		}
-		if (emcStatus->io.reason < 0) {
-		    emcOperatorError(0, io_error, emcStatus->io.reason);
+
+		// update task-specific status
+		emcTaskUpdate(&emcStatus->task);
+
+		// handle RCS_STAT_MSG base class members explicitly, since this
+		// is not an NML_MODULE and they won't be set automatically
+
+		// do task
+		emcStatus->task.command_type = emcCommand->type;
+		emcStatus->task.echo_serial_number = emcCommand->serial_number;
+
+		// do top level
+		emcStatus->command_type = emcCommand->type;
+		emcStatus->echo_serial_number = emcCommand->serial_number;
+
+		if (taskPlanError || taskExecuteError ||
+			emcStatus->task.execState == EMC_TASK_EXEC_ERROR ||
+			emcStatus->motion.status == RCS_ERROR ||
+			emcStatus->io.status == RCS_ERROR) 
+		{
+			emcStatus->status = RCS_ERROR;
+			emcStatus->task.status = RCS_ERROR;
+		} 
+		else if (!taskPlanError && !taskExecuteError &&
+			emcStatus->task.execState == EMC_TASK_EXEC_DONE &&
+			emcStatus->motion.status == RCS_DONE &&
+			emcStatus->io.status == RCS_DONE &&
+			mdi_execute_queue.len() == 0 &&
+			interp_list.len() == 0 &&
+			emcTaskCommand == 0 &&
+			emcStatus->task.interpState == EMC_TASK_INTERP_IDLE) 
+		{
+			emcStatus->status = RCS_DONE;
+			emcStatus->task.status = RCS_DONE;
+		} 
+		else 
+		{
+			emcStatus->status = RCS_EXEC;
+			emcStatus->task.status = RCS_EXEC;
 		}
-	    }
-	    // motion already should have reported this condition (and set RCS_ERROR?)
-	    // an M19 orient failed to complete within timeout
-	    // if ((emcStatus->motion.status == RCS_ERROR) && 
-	    // 	(emcStatus->motion.spindle.orient_state == EMCMOT_ORIENT_FAULTED) &&
-	    // 	(emcStatus->motion.spindle.orient_fault != 0)) {
-	    // 	emcOperatorError(0, "wait for orient complete timed out");
-	    // }
 
-            // abort everything
-            emcTaskAbort();
-            emcIoAbort(EMC_ABORT_MOTION_OR_IO_RCS_ERROR);
-        for (int s = 0; s < emcStatus->motion.traj.spindles; s++) emcSpindleAbort(s);;
-	    mdi_execute_abort();
-	    // without emcTaskPlanClose(), a new run command resumes at
-	    // aborted line-- feature that may be considered later
-	    {
-		int was_open = taskplanopen;
-		emcTaskPlanClose();
-                emcTaskPlanReset();  // Flush any unflushed segments
-		if (emc_debug & EMC_DEBUG_INTERP && was_open) {
-		    rcs_print("emcTaskPlanClose() called at %s:%d\n",
-			      __FILE__, __LINE__);
-		}
-	    }
+		// write it
+		// since emcStatus was passed to the WM init functions, it
+		// will be updated in the _update() functions above. There's
+		// no need to call the individual functions on all WM items.
+		emcStatusBuffer->write(emcStatus);
 
-	    // clear out the pending command
-	    emcTaskCommand = 0;
-	    interp_list.clear();
-	    emcStatus->task.currentLine = 0;
-
-	    emcAbortCleanup(EMC_ABORT_MOTION_OR_IO_RCS_ERROR);
-
-	    // clear out the interpreter state
-	    emcStatus->task.interpState = EMC_TASK_INTERP_IDLE;
-	    emcStatus->task.execState = EMC_TASK_EXEC_DONE;
-	    stepping = 0;
-	    steppingWait = 0;
-
-	    // now queue up command to resynch interpreter
-	    emcTaskQueueCommand(&taskPlanSynchCmd);
-	}
-
-	// update task-specific status
-	emcTaskUpdate(&emcStatus->task);
-
-	// handle RCS_STAT_MSG base class members explicitly, since this
-	// is not an NML_MODULE and they won't be set automatically
-
-	// do task
-	emcStatus->task.command_type = emcCommand->type;
-	emcStatus->task.echo_serial_number = emcCommand->serial_number;
-
-	// do top level
-	emcStatus->command_type = emcCommand->type;
-	emcStatus->echo_serial_number = emcCommand->serial_number;
-
-	if (taskPlanError || taskExecuteError ||
-	    emcStatus->task.execState == EMC_TASK_EXEC_ERROR ||
-	    emcStatus->motion.status == RCS_ERROR ||
-	    emcStatus->io.status == RCS_ERROR) {
-	    emcStatus->status = RCS_ERROR;
-	    emcStatus->task.status = RCS_ERROR;
-	} else if (!taskPlanError && !taskExecuteError &&
-		   emcStatus->task.execState == EMC_TASK_EXEC_DONE &&
-		   emcStatus->motion.status == RCS_DONE &&
-		   emcStatus->io.status == RCS_DONE &&
-		   mdi_execute_queue.len() == 0 &&
-		   interp_list.len() == 0 &&
-		   emcTaskCommand == 0 &&
-		   emcStatus->task.interpState == EMC_TASK_INTERP_IDLE) {
-	    emcStatus->status = RCS_DONE;
-	    emcStatus->task.status = RCS_DONE;
-	} else {
-	    emcStatus->status = RCS_EXEC;
-	    emcStatus->task.status = RCS_EXEC;
-	}
-
-	// write it
-	// since emcStatus was passed to the WM init functions, it
-	// will be updated in the _update() functions above. There's
-	// no need to call the individual functions on all WM items.
-	emcStatusBuffer->write(emcStatus);
-
-	// wait on timer cycle, if specified, or calculate actual
-	// interval if INI file says to run full out via
-	// [TASK] CYCLE_TIME <= 0.0d
-	// emcTaskEager = 0;
+		// wait on timer cycle, if specified, or calculate actual
+		// interval if INI file says to run full out via
+		// [TASK] CYCLE_TIME <= 0.0d
+		// emcTaskEager = 0;
         endTime = etime();
         deltaTime = endTime - startTime;
         if (deltaTime < minTime)
+		{
             minTime = deltaTime;
+		}
         else if (deltaTime > maxTime)
+		{
             maxTime = deltaTime;
+		}
         startTime = endTime;
-        if (!getenv( (char*)"QUIET_TASK") ) {
-            if (deltaTime > (latency_excursion_factor * emc_task_cycle_time)) {
-                if (num_latency_warnings < 10) {
+        if (!getenv( (char*)"QUIET_TASK") ) 
+		{
+            if (deltaTime > (latency_excursion_factor * emc_task_cycle_time)) 
+			{
+                if (num_latency_warnings < 10) 
+				{
                     rcs_print("task: main loop took %.6f seconds\n", deltaTime);
                 }
                 num_latency_warnings ++;
             }
         }
 
-	if ((emcTaskNoDelay) || (emcTaskEager)) {
-	    emcTaskEager = 0;
-	} else {
-	    timer->wait();
-	}
+		if ((emcTaskNoDelay) || (emcTaskEager)) 
+		{
+			emcTaskEager = 0;
+		} 
+		else 
+		{
+			timer->wait();
+		}
     }
     // end of while (! done)
 
