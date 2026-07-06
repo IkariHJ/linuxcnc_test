@@ -657,6 +657,8 @@ int Task::emcIoSetDebug(int debug)
     return sendCommand(&ioDebugMsg);
 }
 
+// 强制 NML 消息，不做缓冲，立即下发 IO 控制器
+// 
 int Task::emcAuxEstopOn()
 {
     EMC_AUX_ESTOP_ON estopOnMsg;

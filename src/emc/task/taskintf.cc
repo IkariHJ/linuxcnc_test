@@ -688,8 +688,9 @@ int emcJointHalt(int joint)
 
 int emcJogAbort(int joint)
 {
-    if (joint < 0 || joint >= EMCMOT_MAX_JOINTS) {
-	return 0;
+    if (joint < 0 || joint >= EMCMOT_MAX_JOINTS)
+    {
+        return 0;
     }
     emcmotCommand.command = EMCMOT_JOG_ABORT;
     emcmotCommand.joint = joint;
@@ -754,8 +755,9 @@ int emcJointEnable(int joint)
 
 int emcJointDisable(int joint)
 {
-    if (joint < 0 || joint >= EMCMOT_MAX_JOINTS) {
-	return 0;
+    if (joint < 0 || joint >= EMCMOT_MAX_JOINTS) 
+    {
+        return 0;
     }
 
     emcmotCommand.command = EMCMOT_JOINT_DISABLE_AMPLIFIER;
@@ -778,7 +780,8 @@ int emcJointHome(int joint)
 
 int emcJointUnhome(int joint)
 {
-	if (joint < -2 || joint >= EMCMOT_MAX_JOINTS) {
+	if (joint < -2 || joint >= EMCMOT_MAX_JOINTS) 
+    {
 		return 0;
 	}
 
@@ -1795,6 +1798,7 @@ int emcMotionHalt()
     return (r1 == 0 && r2 == 0 && r3 == 0 && r4 == 0 && r5 == 0) ? 0 : -1;
 }
 
+// 分别调用单轴点动停止、轨迹急停，全部写入 motion 共享内存
 int emcMotionAbort()
 {
     int r1;
@@ -1802,13 +1806,18 @@ int emcMotionAbort()
     int r3 = 0;
     int t;
 
+    // usrmotWriteEmcmotCommand() 写入运动共享内存，硬实时生效；
+    
     r1 = -1;
-    for (t = 0; t < EMCMOT_MAX_JOINTS; t++) {
-	if (0 == emcJogAbort(t)) {
-	    r1 = 0;		// at least one is okay
-	}
+    // 所有轴 Jog 点动停止
+    for (t = 0; t < EMCMOT_MAX_JOINTS; t++) 
+    {
+        if (0 == emcJogAbort(t)) 
+        {
+            r1 = 0;		// at least one is okay
+        }
     }
-
+    // 轨迹规划器急停
     r2 = emcTrajAbort();
 
     return (r1 == 0 && r2 == 0 && r3 == 0) ? 0 : -1;
@@ -1933,6 +1942,8 @@ int emcSpindleOn(int spindle, double speed, double css_factor, double offset, in
     return usrmotWriteEmcmotCommand(&emcmotCommand);
 }
 
+// 向 motion 发送 EMCMOT_SPINDLE_OFF 指令，切断主轴转速输出；
+// 通过运动共享内存下发，实时生效。
 int emcSpindleOff(int spindle)
 {
     emcmotCommand.command = EMCMOT_SPINDLE_OFF;

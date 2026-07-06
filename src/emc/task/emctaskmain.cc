@@ -3667,18 +3667,57 @@ int main(int argc, char *argv[])
     }
 
     // set the default startup modes
+	// 设置默认启动模式
+	// 上电安全逻辑开始
+
+	// 运动层命令（发给 motion 实时进程）：usrmotWriteEmcmotCommand() 写入运动共享内存，硬实时生效；
+	// NML 上层 IO 指令（发给 emcio）：sendCommand()/forceCommand() 通过 NML 通道下发 IO 控制消息。// 软实时(PLC???)生效； // 应该是通过这个函数通知PLC???
+
+	// 全局运动急停
     emcMotionAbort();
-    for (int s = 0; s < emcStatus->motion.traj.spindles; s++) emcSpindleAbort(s);
+
+	// 主轴批量停止
+    for (int s = 0; s < emcStatus->motion.traj.spindles; s++) 
+	{
+		emcSpindleAbort(s);
+	}
+
+	// 辅助急停开启
     emcAuxEstopOn();
-    for (int t = 0; t < emcStatus->motion.traj.joints; t++) {
+
+	// 逐轴伺服放大器关闭
+	// 应该大概率是驱动器掉电,伺服使能断开，电机松开；
+    for (int t = 0; t < emcStatus->motion.traj.joints; t++) 
+	{
         emcJointDisable(t);
     }
+
+	// 轨迹规划器关闭
+	// 关闭 motion 层轨迹插补引擎，不再接收 G 代码运动指令，直到手动解除锁定。
+	// 应该是让Motion不在执行指令
     emcTrajDisable();
+
+	// 润滑关闭
     emcLubeOff();
+
+	// IO 通道急停复位
+	// 应该是切断所有IO输出
     emcIoAbort(EMC_ABORT_TASK_STATE_ESTOP);
+
+	// 全部轴清除回零标记
+	// 参数 -2 是特殊值，表示清除所有轴的标记
     emcJointUnhome(-2);
 
+	// 轨迹规划器模式设置为自由模式
+	// 轨迹置空闲模式
     emcTrajSetMode(EMC_TRAJ_MODE_FREE);
+
+	// 上电安全设计逻辑总结:(即以上代码的含义)
+	// 运动优先关停：先停主轴、插补、点动，防止上电残留运动指令窜动；
+	// 安全锁锁定：触发辅助急停，整机硬件逻辑上锁；
+	// 动力切断：全部伺服放大器禁用，电机失能；
+	// 状态清零：清除回零标记、IO 输出、润滑；
+	// 就绪等待：轨迹切空闲，等待人工操作（解除急停→回零→使能伺服）。
 
     // reflect the initial value of EMC_DEBUG in emcStatus->debug
     emcStatus->debug = emc_debug;
