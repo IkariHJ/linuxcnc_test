@@ -3719,19 +3719,35 @@ int main(int argc, char *argv[])
 	// 状态清零：清除回零标记、IO 输出、润滑；
 	// 就绪等待：轨迹切空闲，等待人工操作（解除急停→回零→使能伺服）。
 
+
+
     // reflect the initial value of EMC_DEBUG in emcStatus->debug
+	// 将全局调试开关值写入共享内存emcStatus->debug
+	// 同步调试标记到共享内存
+	// emc_debug：iniLoad() 从机床 INI [EMC] DEBUG 读取的
+	// emcStatus：全系统进程共享状态结构体（NML 共享内存）；
     emcStatus->debug = emc_debug;
 
+	// 计时统计初始化
+	// 进入循环前记录基准时间戳 ????
     startTime = etime();	// set start time before entering loop;
+
+	// first_start_time / endTime / minTime / maxTime 这些变量是用来统计Task主循环的周期时间的
     first_start_time = startTime;
     endTime = startTime;
     // it will be set at end of loop from now on
+	// 最小周期初始化为浮点数最大值（后续会不断刷新更小值）
     minTime = DBL_MAX;		// set to value that can never be exceeded
+	// 最大周期初始化为0（后续会不断刷新更大值）
     maxTime = 0.0;		// set to value that can never be underset
 
-    if (0 != usrmotReadEmcmotConfig(&emcmotConfig)) {
+	// 读取motion全局配置
+    if (0 != usrmotReadEmcmotConfig(&emcmotConfig)) 
+	{
         rcs_print("%s failed usrmotReadEmcmotconfig()\n",__FILE__);
     }
+
+	// 无限主循环，机床运行全程不停
     while (!done) {
         static int gave_soft_limit_message = 0;
         check_ini_hal_items(emcStatus->motion.traj.joints);

@@ -49,9 +49,10 @@ double etime()
     struct timeval tp;
     double retval;
 
-    if (0 != gettimeofday(&tp, NULL)) {
-	rcs_print_error("etime: can't get time\n");
-	return 0.0;
+    if (0 != gettimeofday(&tp, NULL)) 
+    {
+        rcs_print_error("etime: can't get time\n");
+        return 0.0;
     }
 
     retval = ((double) tp.tv_sec) + ((double) tp.tv_usec) / 1000000.0;
