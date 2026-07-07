@@ -1088,15 +1088,21 @@ int emcTrajSetMode(int mode)
 
 int emcTrajSetVelocity(double vel, double ini_maxvel)
 {
-    if (vel < 0.0) {
-	vel = 0.0;
-    } else if (vel > TrajConfig.MaxVel) {
-	vel = TrajConfig.MaxVel;
+    if (vel < 0.0) 
+    {
+        vel = 0.0;
+    } 
+    else if (vel > TrajConfig.MaxVel) 
+    {
+        vel = TrajConfig.MaxVel;
     }
 
-    if (ini_maxvel < 0.0) {
+    if (ini_maxvel < 0.0) 
+    {
 	    ini_maxvel = 0.0;
-    } else if (vel > TrajConfig.MaxVel) {
+    } 
+    else if (vel > TrajConfig.MaxVel) 
+    {
 	    ini_maxvel = TrajConfig.MaxVel;
     }
 
@@ -1106,7 +1112,8 @@ int emcTrajSetVelocity(double vel, double ini_maxvel)
 
     int retval = usrmotWriteEmcmotCommand(&emcmotCommand);
 
-    if (emc_debug & EMC_DEBUG_CONFIG) {
+    if (emc_debug & EMC_DEBUG_CONFIG) 
+    {
         rcs_print("%s(%.4f, %.4f) returned %d\n", __FUNCTION__, vel, ini_maxvel, retval);
     }
     return retval;

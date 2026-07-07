@@ -3751,28 +3751,52 @@ int main(int argc, char *argv[])
 	// 无限主循环，机床运行全程不停
     while (!done) 
 	{
+		// 软限位报警???
         static int gave_soft_limit_message = 0;
+
+		// 遍历所有轴，校验 INI 配置的软限位、HAL 绑定轴参数合法性，触发超限则打印提示
+		// 检查并更新运动参数
+		// 1. 检查并更新全局运动参数
+		// 2. 检查并更新每个关节的运动参数
+		// 3. 检查并更新每个轴的运动参数
+		// 4. 检查并更新轨迹规划参数
+		// 5. 检查并更新圆弧插补参数
+		// 6. 检查并更新每个关节的回差、限位、速度、加速度等参数
+		// 7. 检查并更新每个轴的限位、速度、加速度等参数 
         check_ini_hal_items(emcStatus->motion.traj.joints);
+
 		// read command
+		// 读取 NML 指令通道 emcCommandBuffer
 		if (0 != emcCommandBuffer->read()) 
 		{
 			// got a new command, so clear out errors
+			// 清除错误标记
+			// 获取指令，清除报警
 			taskPlanError = 0;
 			taskExecuteError = 0;
 		}
+
 		// run control cycle
+		// 译码部分
+		// emcTaskPlan()函数是G代码解释器的核心函数，主要负责解析G代码指令并生成运动轨迹计划。
 		if (0 != emcTaskPlan()) 
 		{
 			taskPlanError = 1;
 		}
+
+		// emcTaskExecute()函数是G代码执行器的核心函数，主要负责将运动轨迹计划发送给运动控制器（motion实时进程）执行。
 		if (0 != emcTaskExecute()) 
 		{
 			taskExecuteError = 1;
 		}
-		// update subordinate status
 
+		// update subordinate status
+		// 同步子系统状态到共享内存
+		// 读取 HAL IO 输入（急停、限位、气缸），刷新全局共享内存emcStatus->io，供 UI 显示
 		emcIoUpdate(&emcStatus->io);
+		// 读取 motion 实时进程状态，刷新全局共享内存emcStatus->motion，供 UI 显示
 		emcMotionUpdate(&emcStatus->motion);
+
 		// synchronize subordinate states
 		if (emcStatus->io.aux.estop) 
 		{

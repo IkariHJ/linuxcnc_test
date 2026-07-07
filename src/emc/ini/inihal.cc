@@ -232,114 +232,218 @@ static void copy_hal_data(const ptr_inihal_data &i, value_inihal_data &j)
 
 int check_ini_hal_items(int numjoints)
 {
+    // 全局旧参数快照（上一轮循环保存的 INI 运动参数）；
     value_inihal_data new_inihal_data_mutable;
+
+    // 全局新参数快照（当前循环读取的 INI 运动参数）；
+    // 通过 HAL 接口读取 INI 文件中定义的运动参数，保存到 new_inihal_data_mutable 中
     copy_hal_data(*the_inihal_data, new_inihal_data_mutable);
+
+    // 通过引用传递，方便后续代码直接使用 new_inihal_data_mutable 中的参数
+    // 只读快照，防止对比过程中被篡改
     const value_inihal_data &new_inihal_data = new_inihal_data_mutable;
 
-    if (CHANGED(traj_default_velocity)) {
-        if (debug) SHOW_CHANGE(traj_default_velocity)
+    // CHANGED(var)	        对比new_inihal_data.var 和 旧缓存值，返回 1 = 参数发生变化，0 = 无变更
+    // NEW(var)	            提取本次快照里新的参数值
+    // UPDATE(var)	        把新参数写入全局旧缓存，下一轮循环以此为基准对比
+    // SHOW_CHANGE(var)	    debug 模式打印：旧值→新值，用于参数调试追踪
+
+    // 也就是说以下参数是可以中途修改的
+
+    // 全局默认速度
+    // 检测 INI [TRAJ] DEFAULT_LINEAR_VELOCITY 是否被修改
+    if (CHANGED(traj_default_velocity)) 
+    {
+        if (debug) 
+        {
+            // 打印参数变更信息(默认速度)
+            SHOW_CHANGE(traj_default_velocity)
+        }
+        // 更新本地缓存
         UPDATE(traj_default_velocity);
-        if (0 != emcTrajSetVelocity(0, NEW(traj_default_velocity))) {
+        // 下发新默认速度给motion轨迹层
+        // emcTrajSetVelocity()函数用于设置轨迹规划器的默认速度参数，确保运动控制器使用最新的速度配置。
+        // 如果设置失败，打印错误信息
+        // 这里传参无法理解，为何速度传参0，默认速度传给INI最大速度???将默认速度设置为零，以确保安全性???
+        if (0 != emcTrajSetVelocity(0, NEW(traj_default_velocity))) 
+        {
             rcs_print("check_ini_hal_items:bad return value from emcTrajSetVelocity\n");
         }
     }
-    if (CHANGED(traj_max_velocity)) {
-        if (debug) SHOW_CHANGE(traj_max_velocity)
+
+    // 机床最大限制速度
+    // 检测 INI [TRAJ] MAX_LINEAR_VELOCITY 是否被修改
+    if (CHANGED(traj_max_velocity)) 
+    {
+        if (debug) 
+        {
+            SHOW_CHANGE(traj_max_velocity)
+        }
         UPDATE(traj_max_velocity);
-        if (0 != emcTrajSetMaxVelocity(NEW(traj_max_velocity))) {
-            if (emc_debug & EMC_DEBUG_CONFIG) {
+        // 下发新最大速度给motion轨迹层
+        // emcTrajSetMaxVelocity()函数用于设置轨迹规划器的最大速度参数，确保运动控制器使用最新的最大速度配置。
+        // 如果设置失败，打印错误信息
+        if (0 != emcTrajSetMaxVelocity(NEW(traj_max_velocity))) 
+        {
+            if (emc_debug & EMC_DEBUG_CONFIG) 
+            {
                 rcs_print("check_ini_hal_items:bad return value from emcTrajSetMaxVelocity\n");
             }
         }
     }
-    if (CHANGED(traj_default_acceleration)) {
-        if (debug) SHOW_CHANGE(traj_default_acceleration)
+
+    // 默认加速度
+    // 检测 INI [TRAJ] DEFAULT_LINEAR_ACCELERATION 是否被修改
+    if (CHANGED(traj_default_acceleration)) 
+    {
+        if (debug) 
+        {
+            SHOW_CHANGE(traj_default_acceleration)
+        }
         UPDATE(traj_default_acceleration);
-        if (0 != emcTrajSetAcceleration(NEW(traj_default_acceleration))) {
-            if (emc_debug & EMC_DEBUG_CONFIG) {
+        // 下发新默认加速度给motion轨迹层
+        // emcTrajSetAcceleration()函数用于设置轨迹规划器的默认加速度参数，确保运动控制器使用最新的加速度配置。
+        // 如果设置失败，打印错误信息
+        if (0 != emcTrajSetAcceleration(NEW(traj_default_acceleration))) 
+        {
+            if (emc_debug & EMC_DEBUG_CONFIG) 
+            {
                 rcs_print("check_ini_hal_items:bad return value from emcTrajSetAcceleration\n");
             }
         }
     }
-    if (CHANGED(traj_max_acceleration)) {
-        if (debug) SHOW_CHANGE(traj_max_acceleration)
+
+    // 最大加速度
+    // 检测 INI [TRAJ] MAX_LINEAR_ACCELERATION 是否被修改
+    if (CHANGED(traj_max_acceleration)) 
+    {
+        if (debug) 
+        {
+            SHOW_CHANGE(traj_max_acceleration)
+        }
         UPDATE(traj_max_acceleration);
-        if (0 != emcTrajSetMaxAcceleration(NEW(traj_max_acceleration))) {
-            if (emc_debug & EMC_DEBUG_CONFIG) {
+        // 下发新最大加速度给motion轨迹层
+        // emcTrajSetMaxAcceleration()函数用于设置轨迹规划器的最大加速度参数，确保运动控制器使用最新的最大加速度配置。
+        // 如果设置失败，打印错误信息
+        if (0 != emcTrajSetMaxAcceleration(NEW(traj_max_acceleration))) 
+        {
+            if (emc_debug & EMC_DEBUG_CONFIG) 
+            {
                 rcs_print("check_ini_hal_items:bad return value from emcTrajSetMaxAcceleration\n");
             }
         }
     }
 
-    if (   CHANGED(traj_arc_blend_enable)
-        || CHANGED(traj_arc_blend_fallback_enable)
-        || CHANGED(traj_arc_blend_optimization_depth)
-        || CHANGED(traj_arc_blend_gap_cycles)
-        || CHANGED(traj_arc_blend_ramp_freq)
-        || CHANGED(traj_arc_blend_tangent_kink_ratio)
-       ) {
-        if (debug) SHOW_CHANGE_ARC_BLEND()
+    // 检测 INI [TRAJ] ARC_BLEND_* 参数是否被修改
+    // ARC_BLEND_ENABLE = 1              	# 圆弧平滑功能使能
+    // ARC_BLEND_FALLBACK_ENABLE = 0     	# 圆弧平滑降级模式
+    // ARC_BLEND_OPTIMIZATION_DEPTH = 50 	# 圆弧平滑优化深度
+    // ARC_BLEND_GAP_CYCLES = 4          	# 圆弧平滑间隙补偿周期
+    // ARC_BLEND_RAMP_FREQ = 100.0       	# 圆弧平滑斜坡频率
+    // ARC_BLEND_KINK_RATIO = 0.1        	# 圆弧平滑折角判定比例
+    // 只要有一个改变就都更新
+    if (CHANGED(traj_arc_blend_enable) || CHANGED(traj_arc_blend_fallback_enable) || CHANGED(traj_arc_blend_optimization_depth)
+        || CHANGED(traj_arc_blend_gap_cycles) || CHANGED(traj_arc_blend_ramp_freq) || CHANGED(traj_arc_blend_tangent_kink_ratio)) 
+    {
+        if (debug) 
+        {
+            SHOW_CHANGE_ARC_BLEND()
+        }
         UPDATE(traj_arc_blend_enable);
         UPDATE(traj_arc_blend_fallback_enable);
         UPDATE(traj_arc_blend_optimization_depth);
         UPDATE(traj_arc_blend_gap_cycles);
         UPDATE(traj_arc_blend_ramp_freq);
         UPDATE(traj_arc_blend_tangent_kink_ratio);
-        if (0 != emcSetupArcBlends(old_inihal_data.traj_arc_blend_enable
-                                  ,old_inihal_data.traj_arc_blend_fallback_enable
-                                  ,old_inihal_data.traj_arc_blend_optimization_depth
-                                  ,old_inihal_data.traj_arc_blend_gap_cycles
-                                  ,old_inihal_data.traj_arc_blend_ramp_freq
-                                  ,old_inihal_data.traj_arc_blend_tangent_kink_ratio
-                                  )) {
-            if (emc_debug & EMC_DEBUG_CONFIG) {
+        // 下发新圆弧平滑参数给motion轨迹层
+        // emcSetupArcBlends()函数用于设置轨迹规划器的圆弧平滑参数，确保运动控制器使用最新的圆弧平滑配置。
+        // 如果设置失败，打印错误信息
+        // 这里为何会使用old_inihal_data？？？
+        // 通过上面的UPDATE（）函数感觉，和上面参数是同等的作用，只是写法不一致，整体还需要再观察???
+        if (0 != emcSetupArcBlends(old_inihal_data.traj_arc_blend_enable ,old_inihal_data.traj_arc_blend_fallback_enable ,old_inihal_data.traj_arc_blend_optimization_depth
+                                  ,old_inihal_data.traj_arc_blend_gap_cycles ,old_inihal_data.traj_arc_blend_ramp_freq ,old_inihal_data.traj_arc_blend_tangent_kink_ratio )) 
+        {
+            if (emc_debug & EMC_DEBUG_CONFIG) 
+            {
                 rcs_print("bad return value from emcSetupArcBlends\n");
             }
             return -1;
         }
     }
-    for (int idx = 0; idx < numjoints; idx++) {
-        if (CHANGED_IDX(joint_backlash,idx) ) {
-            if (debug) SHOW_CHANGE_IDX(joint_backlash,idx);
+
+    for (int idx = 0; idx < numjoints; idx++) 
+    {
+        if (CHANGED_IDX(joint_backlash,idx) ) 
+        {
+            if (debug) 
+            {
+                SHOW_CHANGE_IDX(joint_backlash,idx);
+            }
             UPDATE_IDX(joint_backlash,idx);
-            if (0 != emcJointSetBacklash(idx,NEW(joint_backlash[idx]))) {
-                if (emc_debug & EMC_DEBUG_CONFIG) {
+            if (0 != emcJointSetBacklash(idx,NEW(joint_backlash[idx]))) 
+            {
+                if (emc_debug & EMC_DEBUG_CONFIG) 
+                {
                     rcs_print("check_ini_hal_items:bad return value from emcJointSetBacklash\n");
                 }
+            }
         }
-        }
-        if (CHANGED_IDX(joint_min_limit,idx) ) {
-            if (debug) SHOW_CHANGE_IDX(joint_min_limit,idx);
+        if (CHANGED_IDX(joint_min_limit,idx) ) 
+        {
+            if (debug) 
+            {
+                SHOW_CHANGE_IDX(joint_min_limit,idx);
+            }
             UPDATE_IDX(joint_min_limit,idx);
-            if (0 != emcJointSetMinPositionLimit(idx,NEW(joint_min_limit[idx]))) {
-                if (emc_debug & EMC_DEBUG_CONFIG) {
+            if (0 != emcJointSetMinPositionLimit(idx,NEW(joint_min_limit[idx]))) 
+            {
+                if (emc_debug & EMC_DEBUG_CONFIG) 
+                {
                     rcs_print_error("check_ini_hal_items:bad return from emcJointSetMinPositionLimit\n");
                 }
             }
         }
-        if (CHANGED_IDX(joint_max_limit,idx) ) {
-            if (debug) SHOW_CHANGE_IDX(joint_max_limit,idx);
+        if (CHANGED_IDX(joint_max_limit,idx) ) 
+        {
+            if (debug) 
+            {
+                SHOW_CHANGE_IDX(joint_max_limit,idx);
+            }
             UPDATE_IDX(joint_max_limit,idx);
-            if (0 != emcJointSetMaxPositionLimit(idx,NEW(joint_max_limit[idx]))) {
-                if (emc_debug & EMC_DEBUG_CONFIG) {
+            if (0 != emcJointSetMaxPositionLimit(idx,NEW(joint_max_limit[idx]))) 
+            {
+                if (emc_debug & EMC_DEBUG_CONFIG) 
+                {
                     rcs_print_error("check_ini_hal_items:bad return from emcJointSetMaxPositionLimit\n");
                 }
             }
         }
-        if (CHANGED_IDX(joint_max_velocity,idx) ) {
-            if (debug) SHOW_CHANGE_IDX(joint_max_velocity,idx);
+        if (CHANGED_IDX(joint_max_velocity,idx) ) 
+        {
+            if (debug) 
+            {
+                SHOW_CHANGE_IDX(joint_max_velocity,idx);
+            }
             UPDATE_IDX(joint_max_velocity,idx);
-            if (0 != emcJointSetMaxVelocity(idx, NEW(joint_max_velocity[idx]))) {
-                if (emc_debug & EMC_DEBUG_CONFIG) {
+            if (0 != emcJointSetMaxVelocity(idx, NEW(joint_max_velocity[idx]))) 
+            {
+                if (emc_debug & EMC_DEBUG_CONFIG) 
+                {
                     rcs_print_error("check_ini_hal_items:bad return from emcJointSetMaxVelocity\n");
                 }
             }
         }
-        if (CHANGED_IDX(joint_max_acceleration,idx) ) {
-            if (debug) SHOW_CHANGE_IDX(joint_max_acceleration,idx);
+        if (CHANGED_IDX(joint_max_acceleration,idx) ) 
+        {
+            if (debug) 
+            {
+                SHOW_CHANGE_IDX(joint_max_acceleration,idx);
+            }
             UPDATE_IDX(joint_max_acceleration,idx);
-            if (0 != emcJointSetMaxAcceleration(idx, NEW(joint_max_acceleration[idx]))) {
-                if (emc_debug & EMC_DEBUG_CONFIG) {
+            if (0 != emcJointSetMaxAcceleration(idx, NEW(joint_max_acceleration[idx]))) 
+            {
+                if (emc_debug & EMC_DEBUG_CONFIG) 
+                {
                     rcs_print_error("check_ini_hal_items:bad return from emcJointSetMaxAcceleration\n");
                 }
             }
@@ -347,8 +451,10 @@ int check_ini_hal_items(int numjoints)
         if (   CHANGED_IDX(joint_home,idx)
             || CHANGED_IDX(joint_home_offset,idx)
             || CHANGED_IDX(joint_home_sequence,idx)
-           ) {
-            if (debug) {
+           ) 
+        {
+            if (debug) 
+            {
                 SHOW_CHANGE_IDX(joint_home,idx);
                 SHOW_CHANGE_IDX(joint_home_offset,idx);
                 SHOW_CHANGE_IDX_INT(joint_home_sequence,idx);
@@ -359,69 +465,108 @@ int check_ini_hal_items(int numjoints)
             if  (0 != emcJointUpdateHomingParams(idx, NEW(joint_home[idx]),
                                                       NEW(joint_home_offset[idx]),
                                                       NEW(joint_home_sequence[idx]))
-                ) {
-                if (emc_debug & EMC_DEBUG_CONFIG) {
+                ) 
+            {
+                if (emc_debug & EMC_DEBUG_CONFIG) 
+                {
                     rcs_print_error("check_ini_hal_items:bad return from emcJointUpdateHomingParams\n");
                 }
             }
         }
-        if (CHANGED_IDX(joint_ferror,idx) ) {
-            if (debug) SHOW_CHANGE_IDX(joint_ferror,idx);
+        if (CHANGED_IDX(joint_ferror,idx) ) 
+        {
+            if (debug) 
+            {
+                SHOW_CHANGE_IDX(joint_ferror,idx);
+            }
             UPDATE_IDX(joint_ferror,idx);
-            if (0 != emcJointSetFerror(idx,NEW(joint_ferror[idx]))) {
-                if (emc_debug & EMC_DEBUG_CONFIG) {
+            if (0 != emcJointSetFerror(idx,NEW(joint_ferror[idx]))) 
+            {
+                if (emc_debug & EMC_DEBUG_CONFIG) 
+                {
                     rcs_print_error("check_ini_hal_items:bad return from emcJointSetFerror\n");
                 }
             }
         }
-        if (CHANGED_IDX(joint_min_ferror,idx) ) {
-            if (debug) SHOW_CHANGE_IDX(joint_min_ferror,idx);
+        if (CHANGED_IDX(joint_min_ferror,idx) ) 
+        {
+            if (debug) 
+            {
+                SHOW_CHANGE_IDX(joint_min_ferror,idx);
+            }
             UPDATE_IDX(joint_min_ferror,idx);
-            if (0 != emcJointSetMinFerror(idx,NEW(joint_min_ferror[idx]))) {
-                if (emc_debug & EMC_DEBUG_CONFIG) {
+            if (0 != emcJointSetMinFerror(idx,NEW(joint_min_ferror[idx]))) 
+            {
+                if (emc_debug & EMC_DEBUG_CONFIG) 
+                {
                     rcs_print_error("check_ini_hal_items:bad return from emcJointSetMinFerror\n");
                 }
-        }
+            }
         }
     } // numjoints
 
-    for (int idx = 0; idx < EMCMOT_MAX_AXIS; idx++) {
-        if (CHANGED_IDX(axis_min_limit,idx) ) {
-            if (debug) SHOW_CHANGE_IDX(axis_min_limit,idx);
+    for (int idx = 0; idx < EMCMOT_MAX_AXIS; idx++) 
+    {
+        if (CHANGED_IDX(axis_min_limit,idx) ) 
+        {
+            if (debug) 
+            {
+                SHOW_CHANGE_IDX(axis_min_limit,idx);
+            }
             UPDATE_IDX(axis_min_limit,idx);
-            if (0 != emcAxisSetMinPositionLimit(idx,NEW(axis_min_limit[idx]))) {
-                if (emc_debug & EMC_DEBUG_CONFIG) {
+            if (0 != emcAxisSetMinPositionLimit(idx,NEW(axis_min_limit[idx]))) 
+            {
+                if (emc_debug & EMC_DEBUG_CONFIG) 
+                {
                     rcs_print_error("check_ini_hal_items:bad return from emcAxisSetMinPositionLimit\n");
                 }
             }
         }
-        if (CHANGED_IDX(axis_max_limit,idx) ) {
-            if (debug) SHOW_CHANGE_IDX(axis_max_limit,idx);
+        if (CHANGED_IDX(axis_max_limit,idx) ) 
+        {
+            if (debug) 
+            {
+                SHOW_CHANGE_IDX(axis_max_limit,idx);
+            }
             UPDATE_IDX(axis_max_limit,idx);
-            if (0 != emcAxisSetMaxPositionLimit(idx,NEW(axis_max_limit[idx]))) {
-                if (emc_debug & EMC_DEBUG_CONFIG) {
+            if (0 != emcAxisSetMaxPositionLimit(idx,NEW(axis_max_limit[idx]))) 
+            {
+                if (emc_debug & EMC_DEBUG_CONFIG) 
+                {
                     rcs_print_error("check_ini_hal_items:bad return from emcAxisSetMaxPositionLimit\n");
                 }
             }
         }
-        if (CHANGED_IDX(axis_max_velocity,idx) ) {
-            if (debug) SHOW_CHANGE_IDX(axis_max_velocity,idx);
+        if (CHANGED_IDX(axis_max_velocity,idx) ) 
+        {
+            if (debug) 
+            {
+                SHOW_CHANGE_IDX(axis_max_velocity,idx);
+            }
             UPDATE_IDX(axis_max_velocity,idx);
             if (0 != emcAxisSetMaxVelocity(idx,
                   (1 - ext_offset_a_or_v_ratio[idx]) * NEW(axis_max_velocity[idx]),
-                  (    ext_offset_a_or_v_ratio[idx]) * NEW(axis_max_velocity[idx]))) {
-                if (emc_debug & EMC_DEBUG_CONFIG) {
+                  (    ext_offset_a_or_v_ratio[idx]) * NEW(axis_max_velocity[idx]))) 
+            {
+                if (emc_debug & EMC_DEBUG_CONFIG) 
+                {
                     rcs_print_error("check_ini_hal_items:bad return from emcAxisSetMaxVelocity\n");
                 }
             }
         }
-        if (CHANGED_IDX(axis_max_acceleration,idx) ) {
-            if (debug) SHOW_CHANGE_IDX(axis_max_acceleration,idx);
+        if (CHANGED_IDX(axis_max_acceleration,idx) ) 
+        {
+            if (debug) 
+            {
+                SHOW_CHANGE_IDX(axis_max_acceleration,idx);
+            }
             UPDATE_IDX(axis_max_acceleration,idx);
             if (0 != emcAxisSetMaxAcceleration(idx,
                   (1 - ext_offset_a_or_v_ratio[idx]) * NEW(axis_max_acceleration[idx]),
-                  (    ext_offset_a_or_v_ratio[idx]) * NEW(axis_max_acceleration[idx]))) {
-                if (emc_debug & EMC_DEBUG_CONFIG) {
+                  (    ext_offset_a_or_v_ratio[idx]) * NEW(axis_max_acceleration[idx]))) 
+            {
+                if (emc_debug & EMC_DEBUG_CONFIG) 
+                {
                     rcs_print_error("check_ini_hal_items:bad return from emcAxisSetMaxAcceleration\n");
                 }
             }
