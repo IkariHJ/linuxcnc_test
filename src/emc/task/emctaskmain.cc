@@ -3736,7 +3736,7 @@ int main(int argc, char *argv[])
 	// first_start_time / endTime / minTime / maxTime 这些变量是用来统计Task主循环的周期时间的
     first_start_time = startTime;
     endTime = startTime;
-	
+
     // it will be set at end of loop from now on
 	// 最小周期初始化为浮点数最大值（后续会不断刷新更小值）
     minTime = DBL_MAX;		// set to value that can never be exceeded
@@ -3750,6 +3750,15 @@ int main(int argc, char *argv[])
     }
 
 	// 无限主循环，机床运行全程不停
+	// 1.检查并更新运动参数
+	// 2.读取NML指令通道
+	// 3.运行解析G代码指令并生成运动轨迹计划
+	// 4.运行G代码将运动轨迹计划发送给motion执行
+	// 5.同步子系统状态到共享内存，供UI显示	
+	// 6.检测急停，执行安全保护逻辑
+	// 7.检测换刀IO故障
+	// 8.软限位提示标记复位
+	// 9.motion \ IO 故障捕获
     while (!done) 
 	{
 		// 软限位报警???
@@ -3799,31 +3808,49 @@ int main(int argc, char *argv[])
 		emcMotionUpdate(&emcStatus->motion);
 
 		// synchronize subordinate states
+		// 急停触发
 		if (emcStatus->io.aux.estop) 
 		{
 			if (emcStatus->motion.traj.enabled) 
 			{
+				// 1. 关闭轨迹插补器，禁止新运动指令
 				emcTrajDisable();
+				// 2. 终止G代码译码、清空运动缓冲
 				emcTaskAbort();
+				// 3. IO通道全局急停，标记急停触发源
 				emcIoAbort(EMC_ABORT_AUX_ESTOP);
-				for (int s = 0; s < emcStatus->motion.traj.spindles; s++) emcSpindleAbort(s);
+				// 4. 全部主轴强制停止
+				for (int s = 0; s < emcStatus->motion.traj.spindles; s++) 
+				{
+					emcSpindleAbort(s);
+				}
+				// 5. 清除所有轴回零标记
 				emcJointUnhome(-2); // only those joints which are volatile_home
+				// 6. 终止MDI手动输入程序
 				mdi_execute_abort();
+				// 7. 急停后资源清理、报错状态重置
 				emcAbortCleanup(EMC_ABORT_AUX_ESTOP);
-				emcTaskPlanSynch();
+				// 8. 同步程序解释器状态
+				emcTaskPlanSynch();			
 			}
+			// 强制关闭所有冷却???
 			if (emcStatus->io.coolant.mist)
 			{
 				emcCoolantMistOff();
 			}
+			// 强制关闭所有冷却???
 			if (emcStatus->io.coolant.flood) 
 			{
 				emcCoolantFloodOff();
 			}
+			// 强制关闭润滑
 			if (emcStatus->io.lube.on) 
 			{
 				emcLubeOff();
 			}
+			// 强制断电停机
+			// 和上面emcSpindleAbort是同一个函数，作用完全一致
+			// 应该是保险起见，所以又整了一次
 			for (int n = 0; n < emcStatus->motion.traj.spindles; n++)
 			{
 				if (emcStatus->motion.spindle[n].enabled) 
@@ -3834,6 +3861,7 @@ int main(int argc, char *argv[])
 		}
 
 		// toolchanger indicated fault code > 0
+		// 换刀 IO 故障
 		if ((emcStatus->io.status == RCS_ERROR) && emcStatus->io.fault) 
 		{
 			static int reported = -1;
@@ -3854,39 +3882,50 @@ int main(int argc, char *argv[])
 
 		}
 
+		// 软限位提示标记复位??
         if (!emcStatus->motion.on_soft_limit) 
 		{
 			gave_soft_limit_message = 0;
 		}
 
 		// check for subordinate errors, and halt task if so
-        if (   emcStatus->motion.status == RCS_ERROR && emcStatus->motion.on_soft_limit) 
+		// 运动 / IO 故障捕获、整机急停中止、解释器状态重置
+		// 条件1 : motion报错 并且 轴触碰软限位
+        if (emcStatus->motion.status == RCS_ERROR && emcStatus->motion.on_soft_limit) 
 		{ 
-           if (!gave_soft_limit_message) 
-		   {
+			// 保证一次限位只提示一次，避免重复 ????
+           	if (!gave_soft_limit_message) 
+		   	{
+
                 emcOperatorError(0, "On Soft Limit");
                 // if gui does not provide a means to switch to joint mode
                 // the  machine may be stuck (a misconfiguration)
+				// KINEMATICS_IDENTITY : 普通三轴 / 四轴直角铣床、车床
                 if (emcmotConfig.kinType == KINEMATICS_IDENTITY) 
 				{
                     emcOperatorError(0,"Identity kinematics are MISCONFIGURED");
                 }
                 gave_soft_limit_message = 1;
-           }
+           	}
         } 
+		// 条件1 : motion报错 
+		// 条件2 : IO报错 并且 IO报错原因 <= 0
 		else if (emcStatus->motion.status == RCS_ERROR || ((emcStatus->io.status == RCS_ERROR) && (emcStatus->io.reason <= 0))) 
 		{
 			/*! \todo FIXME-- duplicate code for abort,
 			also in emcTaskExecute()
 			and in emcTaskIssueCommand() */
 
+			// IO报错 && IO报错原因 <= 0
 			if (emcStatus->io.status == RCS_ERROR) 
 			{
 				// this is an aborted M6.
+				// 调试模式打印刀库故障码
 				if (emc_debug & EMC_DEBUG_RCS ) 
 				{
 					rcs_print("io.status=RCS_ERROR, fault=%d reason=%d\n", emcStatus->io.fault, emcStatus->io.reason);
 				}
+				// 严重IO故障弹出操作告警窗口
 				if (emcStatus->io.reason < 0) 
 				{
 					emcOperatorError(0, io_error, emcStatus->io.reason);
@@ -3901,18 +3940,26 @@ int main(int argc, char *argv[])
 			// }
 
 			// abort everything
+			// 终止G代码解析任务
 			emcTaskAbort();
+			// IO通道全局急停
 			emcIoAbort(EMC_ABORT_MOTION_OR_IO_RCS_ERROR);
+			// 全部主轴强制停止
 			for (int s = 0; s < emcStatus->motion.traj.spindles; s++) 
 			{
 				emcSpindleAbort(s);;
 			}
+			// 终止手动MDI程序
 			mdi_execute_abort();
 			// without emcTaskPlanClose(), a new run command resumes at
 			// aborted line-- feature that may be considered later
+			// 关闭并重置 G 代码解释器缓冲区
+			// 关闭G代码解释器，清空所有未执行的G代码指令
 			{
 				int was_open = taskplanopen;
+				// 关闭 G 代码解释器缓冲区
 				emcTaskPlanClose();
+				// 重置 G 代码解释器缓冲区
 				emcTaskPlanReset();  // Flush any unflushed segments
 				if (emc_debug & EMC_DEBUG_INTERP && was_open) 
 				{
@@ -3921,19 +3968,25 @@ int main(int argc, char *argv[])
 			}
 
 			// clear out the pending command
-			emcTaskCommand = 0;
-			interp_list.clear();
-			emcStatus->task.currentLine = 0;
+			// 清除界面下发的RUN/PAUSE等指令
+			emcTaskCommand = 0;    
+			// 清空G代码预读链表     
+			interp_list.clear();        
+			// 当前程序行重置为0
+			emcStatus->task.currentLine = 0; 
 
+			// 故障资源统一清理
 			emcAbortCleanup(EMC_ABORT_MOTION_OR_IO_RCS_ERROR);
 
 			// clear out the interpreter state
+			// 置解释器为空闲、执行完成状态
 			emcStatus->task.interpState = EMC_TASK_INTERP_IDLE;
 			emcStatus->task.execState = EMC_TASK_EXEC_DONE;
 			stepping = 0;
 			steppingWait = 0;
 
 			// now queue up command to resynch interpreter
+			// 入队同步指令，同步上下层motion与task状态
 			emcTaskQueueCommand(&taskPlanSynchCmd);
 		}
 
