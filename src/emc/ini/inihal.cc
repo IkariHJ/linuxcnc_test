@@ -371,8 +371,11 @@ int check_ini_hal_items(int numjoints)
         }
     }
 
+    // 检查各个关节的参数是否被修改
     for (int idx = 0; idx < numjoints; idx++) 
     {
+        // 丝杠反向间隙补偿量
+        // 检测 INI [JOINT] BACKLASH 参数是否被修改
         if (CHANGED_IDX(joint_backlash,idx) ) 
         {
             if (debug) 
@@ -388,6 +391,9 @@ int check_ini_hal_items(int numjoints)
                 }
             }
         }
+
+        // 关节最小位置限制
+        // 检测 INI [JOINT] MIN_LIMIT 参数是否被修改
         if (CHANGED_IDX(joint_min_limit,idx) ) 
         {
             if (debug) 
@@ -403,6 +409,9 @@ int check_ini_hal_items(int numjoints)
                 }
             }
         }
+
+        // 关节最大位置限制
+        // 检测 INI [JOINT] MAX_LIMIT 参数是否被修改
         if (CHANGED_IDX(joint_max_limit,idx) ) 
         {
             if (debug) 
@@ -418,6 +427,9 @@ int check_ini_hal_items(int numjoints)
                 }
             }
         }
+
+        // 关节最大速度限制
+        // 检测 INI [JOINT] MAX_VELOCITY 参数是否被修改
         if (CHANGED_IDX(joint_max_velocity,idx) ) 
         {
             if (debug) 
@@ -433,6 +445,9 @@ int check_ini_hal_items(int numjoints)
                 }
             }
         }
+
+        // 关节最大加速度限制
+        // 检测 INI [JOINT] MAX_ACCELERATION 参数是否被修改
         if (CHANGED_IDX(joint_max_acceleration,idx) ) 
         {
             if (debug) 
@@ -448,6 +463,11 @@ int check_ini_hal_items(int numjoints)
                 }
             }
         }
+
+        // 关节回零参数
+        // 检测 INI [JOINT] HOME 参数是否被修改
+        // 检测 INI [JOINT] HOME_OFFSET 参数是否被修改
+        // 检测 INI [JOINT] HOME_SEQUENCE 参数是否被修改
         if (   CHANGED_IDX(joint_home,idx)
             || CHANGED_IDX(joint_home_offset,idx)
             || CHANGED_IDX(joint_home_sequence,idx)
@@ -473,6 +493,9 @@ int check_ini_hal_items(int numjoints)
                 }
             }
         }
+
+        // 关节反馈误差限制
+        // 检测 INI [JOINT] FERROR 参数是否被修改
         if (CHANGED_IDX(joint_ferror,idx) ) 
         {
             if (debug) 
@@ -488,6 +511,9 @@ int check_ini_hal_items(int numjoints)
                 }
             }
         }
+
+        // 关节最小反馈误差限制
+        // 检测 INI [JOINT] MIN_FERROR 参数是否被修改   
         if (CHANGED_IDX(joint_min_ferror,idx) ) 
         {
             if (debug) 
@@ -505,8 +531,11 @@ int check_ini_hal_items(int numjoints)
         }
     } // numjoints
 
+    // 检查各个轴的参数是否被修改
     for (int idx = 0; idx < EMCMOT_MAX_AXIS; idx++) 
     {
+        // 轴最小位置限制
+        // 检测 INI [AXIS] MIN_LIMIT 参数是否被修改
         if (CHANGED_IDX(axis_min_limit,idx) ) 
         {
             if (debug) 
@@ -522,6 +551,9 @@ int check_ini_hal_items(int numjoints)
                 }
             }
         }
+
+        // 轴最大位置限制
+        // 检测 INI [AXIS] MAX_LIMIT 参数是否被修改
         if (CHANGED_IDX(axis_max_limit,idx) ) 
         {
             if (debug) 
@@ -537,6 +569,10 @@ int check_ini_hal_items(int numjoints)
                 }
             }
         }
+
+        // 轴最大速度限制
+        // 检测 INI [AXIS] MAX_VELOCITY 参数是否被
+        // ext_offset_a_or_v_ratio : INI [AXIS] OFFSET_AV_RATIO           # A/V五轴联动偏移比例
         if (CHANGED_IDX(axis_max_velocity,idx) ) 
         {
             if (debug) 
@@ -554,6 +590,10 @@ int check_ini_hal_items(int numjoints)
                 }
             }
         }
+
+        // 轴最大加速度限制
+        // 检测 INI [AXIS] MAX_ACCELERATION 参数是否被修改
+        // ext_offset_a_or_v_ratio : INI [AXIS] OFFSET_AV_RATIO           # A/V五轴联动偏移比例
         if (CHANGED_IDX(axis_max_acceleration,idx) ) 
         {
             if (debug) 

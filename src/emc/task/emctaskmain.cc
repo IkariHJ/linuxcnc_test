@@ -3736,6 +3736,7 @@ int main(int argc, char *argv[])
 	// first_start_time / endTime / minTime / maxTime 这些变量是用来统计Task主循环的周期时间的
     first_start_time = startTime;
     endTime = startTime;
+	
     // it will be set at end of loop from now on
 	// 最小周期初始化为浮点数最大值（后续会不断刷新更小值）
     minTime = DBL_MAX;		// set to value that can never be exceeded
