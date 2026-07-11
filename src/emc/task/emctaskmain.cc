@@ -3754,11 +3754,13 @@ int main(int argc, char *argv[])
 	// 2.读取NML指令通道
 	// 3.运行解析G代码指令并生成运动轨迹计划
 	// 4.运行G代码将运动轨迹计划发送给motion执行
-	// 5.同步子系统状态到共享内存，供UI显示	
-	// 6.检测急停，执行安全保护逻辑
-	// 7.检测换刀IO故障
-	// 8.软限位提示标记复位
-	// 9.motion \ IO 故障捕获
+	// 5.同步子系统状态到共享内存，供UI显示	汇总刷新 task 内部状态
+	// 6.安全逻辑 & 异常故障处理（重点保护逻辑）
+	// 7.NML 指令回声应答回填
+	// 8.系统汇总状态,判断机床运行状态
+	// 9.状态对外发布
+	// 10.循环耗时统计 & 实时性监控
+	// 11.周期休眠控制
     while (!done) 
 	{
 		// 软限位报警???
@@ -3782,7 +3784,7 @@ int main(int argc, char *argv[])
 			// got a new command, so clear out errors
 			// 清除错误标记
 			// 获取指令，清除报警
-			taskPlanError = 0;
+			taskPlanError = 0;                                 
 			taskExecuteError = 0;
 		}
 
@@ -3991,41 +3993,50 @@ int main(int argc, char *argv[])
 		}
 
 		// update task-specific status
+		// 更新task状态
+		// emcStatus = 整机全局 NML 共享状态缓冲区；
+		// emcStatus->task = 专门存放任务解释器层面状态的子结构体，区别于 motion 运动状态、io 输入输出状态。
 		emcTaskUpdate(&emcStatus->task);
-
 		// handle RCS_STAT_MSG base class members explicitly, since this
 		// is not an NML_MODULE and they won't be set automatically
 
+
 		// do task
+		// 写入task子结构体
 		emcStatus->task.command_type = emcCommand->type;
 		emcStatus->task.echo_serial_number = emcCommand->serial_number;
-
 		// do top level
+		// 同时写入顶层全局status
 		emcStatus->command_type = emcCommand->type;
 		emcStatus->echo_serial_number = emcCommand->serial_number;
 
-		if (taskPlanError || taskExecuteError ||
-			emcStatus->task.execState == EMC_TASK_EXEC_ERROR ||
-			emcStatus->motion.status == RCS_ERROR ||
-			emcStatus->io.status == RCS_ERROR) 
+		if (taskPlanError || 			// G 代码译码语法错误
+			taskExecuteError ||			// 指令执行下发异常
+			emcStatus->task.execState == EMC_TASK_EXEC_ERROR ||		// 执行层状态标记错误
+			emcStatus->motion.status == RCS_ERROR ||				// 实时运动层报错（跟随误差、硬限位等）
+			emcStatus->io.status == RCS_ERROR) 						// IO 通道致命故障（M6 刀库硬故障、安全门急停类）
 		{
+			// 判定故障
 			emcStatus->status = RCS_ERROR;
 			emcStatus->task.status = RCS_ERROR;
 		} 
-		else if (!taskPlanError && !taskExecuteError &&
-			emcStatus->task.execState == EMC_TASK_EXEC_DONE &&
-			emcStatus->motion.status == RCS_DONE &&
-			emcStatus->io.status == RCS_DONE &&
-			mdi_execute_queue.len() == 0 &&
-			interp_list.len() == 0 &&
-			emcTaskCommand == 0 &&
-			emcStatus->task.interpState == EMC_TASK_INTERP_IDLE) 
+		else if (!taskPlanError && 									// 无译码错误
+			!taskExecuteError &&									// 无执行下发异常
+			emcStatus->task.execState == EMC_TASK_EXEC_DONE &&		// task 执行状态：执行完成 EMC_TASK_EXEC_DONE
+			emcStatus->motion.status == RCS_DONE &&					// motion 运动层空闲完成 RCS_DONE
+			emcStatus->io.status == RCS_DONE &&						// IO 通道空闲完成 RCS_DONE
+			mdi_execute_queue.len() == 0 &&							// MDI 手动程序队列为空
+			interp_list.len() == 0 &&								// G 代码预解释链表 interp_list 空（无预读程序段）
+			emcTaskCommand == 0 &&									// 无待处理 Task 命令
+			emcStatus->task.interpState == EMC_TASK_INTERP_IDLE) 	// G 代码解释器处于空闲 EMC_TASK_INTERP_IDLE
 		{
+			// 判定空闲
 			emcStatus->status = RCS_DONE;
 			emcStatus->task.status = RCS_DONE;
 		} 
 		else 
 		{
+			// 判定运行中
 			emcStatus->status = RCS_EXEC;
 			emcStatus->task.status = RCS_EXEC;
 		}
@@ -4034,14 +4045,19 @@ int main(int argc, char *argv[])
 		// since emcStatus was passed to the WM init functions, it
 		// will be updated in the _update() functions above. There's
 		// no need to call the individual functions on all WM items.
+		// 共享内存状态写入
 		emcStatusBuffer->write(emcStatus);
 
 		// wait on timer cycle, if specified, or calculate actual
 		// interval if INI file says to run full out via
 		// [TASK] CYCLE_TIME <= 0.0d
 		// emcTaskEager = 0;
+		// 循环耗时采集 & 最大 / 最小耗时统计
+		// 记录时间
         endTime = etime();
+		// 本轮 while 循环真实执行耗时；
         deltaTime = endTime - startTime;
+		// 记录最长用时和最短用时
         if (deltaTime < minTime)
 		{
             minTime = deltaTime;
@@ -4050,7 +4066,10 @@ int main(int argc, char *argv[])
 		{
             maxTime = deltaTime;
 		}
+		// 记录下一次循环的开始时间
         startTime = endTime;
+
+		// 周期延迟超标警告
         if (!getenv( (char*)"QUIET_TASK") ) 
 		{
             if (deltaTime > (latency_excursion_factor * emc_task_cycle_time)) 
@@ -4069,11 +4088,14 @@ int main(int argc, char *argv[])
 		} 
 		else 
 		{
+			// 阻塞休眠，直至达到 CYCLE_TIME 周期；
+			// 限制主线程频率、降低 CPU 占用，维持稳定周期调度。
 			timer->wait();
 		}
     }
     // end of while (! done)
 
+	// 打印运行周期统计
     rcs_print(
         "task: %u cycles, min=%.6f, max=%.6f, avg=%.6f, %u latency excursions (> %dx expected cycle time of %.6fs)\n",
         emcStatus->task.heartbeat,
@@ -4086,8 +4108,10 @@ int main(int argc, char *argv[])
     );
 
     // clean up everything
+	// 有序释放全部资源
     emctask_shutdown();
 
     // and leave
+	// 退出程序
     exit(0);
 }
