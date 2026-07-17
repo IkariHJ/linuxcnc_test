@@ -16,15 +16,18 @@
 ################################################################################
 
 # -1. Get all rip-environment items if we are RIP
-if test "xyes" = "x@RUN_IN_PLACE@"; then
-    if test "${EMC2_HOME:-}" != "@EMC2_HOME@"; then
-        exec @EMC2_HOME@/scripts/rip-environment linuxcnc "$@"
+# 1. RIP 本地编译运行判断
+if test "xyes" = "xno"; then
+    if test "${EMC2_HOME:-}" != "/usr/local"; then
+        exec /usr/local/scripts/rip-environment linuxcnc "$@"
     fi
 fi
 
 # Force pyopengl (python3-opengl) to use its GLX backend, even
 # if we're running on Wayland where it would normally use EGL.
 # Similar for the Gtk and Qt backends.
+# 2.图形渲染兼容修复
+# 强制 OpenGL/Gtk/Qt 使用 X11 后端，解决 Wayland 桌面下 AXIS/QT 界面黑屏、渲染异常。
 if [[ ! -v LINUXCNC_OPENGL_PLATFORM || "${LINUXCNC_OPENGL_PLATFORM}" == "glx" ]]; then
     export PYOPENGL_PLATFORM="x11"
     export GDK_BACKEND="x11"
@@ -33,30 +36,31 @@ fi
 
 ################################################################################
 # 0. Values that come from configure
+# 3.系统固定路径常量定义
 ################################################################################
-prefix=@prefix@
-exec_prefix=@exec_prefix@
+prefix=/usr/local
+exec_prefix=${prefix}
 
-PIDOF="@PIDOF@ -x"
-PS=@PS@
-AWK=@AWK@
-GREP=@GREP@
-IPCS=@IPCS@
-KILL=@KILL@
+PIDOF="/usr/bin/pidof -x"
+PS=/usr/bin/ps
+AWK=/usr/bin/awk
+GREP=/usr/bin/grep
+IPCS=/usr/bin/ipcs
+KILL=/usr/bin/kill
 
-LINUXCNC_HOME=@EMC2_HOME@; export LINUXCNC_HOME
+LINUXCNC_HOME=/usr/local; export LINUXCNC_HOME
 
-LINUXCNC_BIN_DIR=@EMC2_BIN_DIR@
-LINUXCNC_TCL_DIR=@EMC2_TCL_DIR@
-LINUXCNC_HELP_DIR=@EMC2_HELP_DIR@
-LINUXCNC_RTLIB_DIR=@EMC2_RTLIB_DIR@
-LINUXCNC_CONFIG_PATH="@LINUXCNC_CONFIG_PATH@"
-LINUXCNC_NCFILES_DIR=@EMC2_NCFILES_DIR@
-LINUXCNC_LANG_DIR=@EMC2_LANG_DIR@
-REALTIME=@REALTIME@
-LINUXCNC_IMAGEDIR=@EMC2_IMAGE_DIR@
-LINUXCNC_TCL_LIB_DIR=@EMC2_TCL_LIB_DIR@
-HALLIB_DIR=@HALLIB_DIR@; export HALLIB_DIR
+LINUXCNC_BIN_DIR=/usr/local/bin
+LINUXCNC_TCL_DIR=/usr/local/lib/tcltk/linuxcnc
+LINUXCNC_HELP_DIR=/usr/local/share/doc/linuxcnc
+LINUXCNC_RTLIB_DIR=/usr/local/lib/linuxcnc/modules
+LINUXCNC_CONFIG_PATH="~/linuxcnc/configs:/usr/local/etc/linuxcnc/configs:/usr/local/share/doc/linuxcnc/examples/sample-configs"
+LINUXCNC_NCFILES_DIR=/usr/local/share/linuxcnc/ncfiles
+LINUXCNC_LANG_DIR=/usr/local/lib/tcltk/linuxcnc/msgs
+REALTIME=/usr/local/lib/linuxcnc/realtime
+LINUXCNC_IMAGEDIR=/usr/local/share/linuxcnc
+LINUXCNC_TCL_LIB_DIR=/usr/local/lib/tcltk/linuxcnc
+HALLIB_DIR=/usr/local/share/linuxcnc/hallib; export HALLIB_DIR
 
 #HALLIB_PATH: see also -H option
 HALLIB_PATH=.:$HALLIB_DIR; export HALLIB_PATH
@@ -74,7 +78,8 @@ PATH=$LINUXCNC_BIN_DIR:$PATH
 #ditto scripts if not RIP
 [ -d $LINUXCNC_HOME/scripts ] && PATH=$LINUXCNC_HOME/scripts:$PATH
 
-if test "xyes" = "x@RUN_IN_PLACE@"; then
+# 4.动态库、Python 环境变量
+if test "xyes" = "xno"; then
 	if [ -z "$LD_LIBRARY_PATH" ]; then
 	    LD_LIBRARY_PATH=$LINUXCNC_HOME/lib
 	else
@@ -91,8 +96,10 @@ fi
 export PYTHONPATH
 
 
-MODULE_EXT=@MODEXT@ # module extension, used when insmod'ing
+MODULE_EXT=.so # module extension, used when insmod'ing
 
+
+# 5. 临时日志文件创建
 DEBUG_FILE=$(mktemp /tmp/linuxcnc.debug.XXXXXX)
 PRINT_FILE=$(mktemp /tmp/linuxcnc.print.XXXXXX)
 
@@ -100,6 +107,9 @@ program_available () {
     type -path "$1" > /dev/null 2>&1
 }
 
+
+# 6. usage 帮助函数
+# 执行linuxcnc -h打印全部启动参数说明：
 usage () {
     P=${0##*/}
     cat <<EOF
@@ -196,19 +206,20 @@ do
 done
 shift $(($OPTIND-1))
 
-case "@KERNEL_VERS@" in
+# 实时核检测
+case "" in
 "") ;;
 *)
-    if [ `uname -r` != "@KERNEL_VERS@" ]; then
+    if [ `uname -r` != "" ]; then
         if tty -s || [ -z "$DISPLAY" ]; then
-            echo "LinuxCNC requires the real-time kernel @KERNEL_VERS@ to run."
+            echo "LinuxCNC requires the real-time kernel  to run."
             echo "Before running LinuxCNC, reboot and choose this kernel at the boot menu."
         else
-            @WISH@ <<EOF
+            /usr/bin/wish8.6 <<EOF
                 wm wi .
                 tk_messageBox -type ok \
                     -title LinuxCNC -icon error -title "Realtime Kernel Required" \
-                    -message {LinuxCNC requires the real-time kernel @KERNEL_VERS@ to run.  Before running LinuxCNC, reboot and choose this kernel at the boot menu.}
+                    -message {LinuxCNC requires the real-time kernel  to run.  Before running LinuxCNC, reboot and choose this kernel at the boot menu.}
                 exit
 EOF
         fi
@@ -223,10 +234,11 @@ if ! tty -s; then
 fi
 fi
 
+# 异常捕获
 function ErrorCheck () {
     result=$?
     if [ ! -z "$DISPLAY" ]; then
-        echo "catch {send -async popimage destroy .}; destroy ." | @WISH@
+        echo "catch {send -async popimage destroy .}; destroy ." | /usr/bin/wish8.6
     fi
 
     if [ $result -ne 0 ]; then
@@ -252,7 +264,7 @@ and
     $HOME/linuxcnc_print.txt
 as well as in the output of the shell command 'dmesg' and in the terminal"
         else
-            @WISH@ $LINUXCNC_TCL_DIR/show_errors.tcl $DEBUG_FILE $PRINT_FILE
+            /usr/bin/wish8.6 $LINUXCNC_TCL_DIR/show_errors.tcl $DEBUG_FILE $PRINT_FILE
         fi
     fi
     rm -f $DEBUG_FILE $PRINT_FILE 2>/dev/null
@@ -261,10 +273,12 @@ as well as in the output of the shell command 'dmesg' and in the terminal"
 
 trap ErrorCheck EXIT
 
-################################################################################
+#################################################################################
 # 1.3. INIFILE                           find INI file to use                   #
-################################################################################
+# INI 配置文件选择与预处理															#
+#################################################################################
 
+# 获取 INI 文件逻辑
 if [ ! -z "$1" ]; then
     case "$1" in
       -)  USE_LAST_INIFILE=1;;
@@ -276,16 +290,16 @@ fi
 EXTRA_ARGS="$@"
 
 # 1.3.1. Determine if we have run-in place or installed system
-RUN_IN_PLACE=@RUN_IN_PLACE@
+RUN_IN_PLACE=no
 echo RUN_IN_PLACE=$RUN_IN_PLACE >>$PRINT_FILE
 
-LINUXCNCVERSION="@EMC2VERSION@"; export LINUXCNCVERSION
+LINUXCNCVERSION="2.9.8"; export LINUXCNCVERSION
 
 # common from here..
 INIVAR=inivar
 HALCMD="halcmd $DASHK"
-PICKCONFIG="@WISH@ $LINUXCNC_TCL_DIR/bin/pickconfig.tcl"
-LINUXCNC_EMCSH=@WISH@
+PICKCONFIG="/usr/bin/wish8.6 $LINUXCNC_TCL_DIR/bin/pickconfig.tcl"
+LINUXCNC_EMCSH=/usr/bin/wish8.6
 
 echo LINUXCNC_DIR=$LINUXCNC_DIR >>$PRINT_FILE
 echo LINUXCNC_BIN_DIR=$LINUXCNC_BIN_DIR >>$PRINT_FILE
@@ -514,7 +528,7 @@ if [ `$INIVAR -ini "$INIFILE" -var MODE -sec PLASMAC 2> /dev/null` ]; then
     exit 0
 fi
 
-@TCLSH@ $HALLIB_DIR/check_config.tcl "$INIFILE"
+/usr/bin/tclsh8.6 $HALLIB_DIR/check_config.tcl "$INIFILE"
 exitval=$?
 case "$exitval" in
   0) ;;
@@ -571,7 +585,7 @@ case $EMCDISPLAY in
 esac
 
 # 2.9. get NML config information
-GetFromIniEx NML_FILE LINUXCNC NML_FILE EMC @DEFAULT_NMLFILE@
+GetFromIniEx NML_FILE LINUXCNC NML_FILE EMC /usr/local/share/linuxcnc/linuxcnc.nml
 NMLFILE=$retval
 export NMLFILE
 
@@ -748,7 +762,7 @@ if [ -f $LOCKFILE ]; then
     echo "No display, no tty, trying to clean up other instance automatically"
     input=y
   else
-    input=$(@WISH@ <<EOF
+    input=$(/usr/bin/wish8.6 <<EOF
 wm wi .
 puts [tk_messageBox -title LinuxCNC -message "LinuxCNC is still running.  Restart it?" -type yesno]
 exit
@@ -809,7 +823,10 @@ fi
 ################################################################################
 
 # 4.3.1. Run linuxcncserver in background, always (it owns/creates the NML buffers)
-echo "Starting LinuxCNC server program: $EMCSERVER" >>$PRINT_FILE
+echo "" 
+echo "启动时序 :" 
+echo "# 1.linuxcncsvr NML 通信服务最先启动，所有进程共享内存载体" | tee -a $PRINT_FILE
+echo "# Starting LinuxCNC server program: $EMCSERVER" | tee -a $PRINT_FILE
 if ! program_available $EMCSERVER; then
     echo "Can't execute server program $EMCSERVER"
     Cleanup
@@ -819,7 +836,9 @@ export INI_FILE_NAME="$INIFILE"
 $EMCSERVER -ini "$INIFILE"
 
 # 4.3.2. Start REALTIME
-echo "Loading Real Time OS, RTAPI, and HAL_LIB modules" >>$PRINT_FILE
+echo "" 
+echo "# 2.加载 RT 实时内核、RTAPI、HAL 底层" | tee -a $PRINT_FILE
+echo "# Loading Real Time OS, RTAPI, and HAL_LIB modules" | tee -a $PRINT_FILE
 if ! $REALTIME start ; then
     echo "Realtime system did not load"
     Cleanup
@@ -829,41 +848,58 @@ fi
 # 4.3.3. export the location of the HAL realtime modules so that
 # "halcmd loadrt" can find them
 export HAL_RTMOD_DIR=$LINUXCNC_RTLIB_DIR
+echo "" 
+echo "# 3.?????????????" | tee -a $PRINT_FILE
+echo "# HAL_RTMOD_DIR = $LINUXCNC_RTLIB_DIR" | tee -a $PRINT_FILE
 
 # 4.3.4. Run io in background if so defined in INI
 if [ "$EMCIO" != "" ] ; then
-        echo "Starting LinuxCNC IO program: $EMCIO" >>$PRINT_FILE
+		echo "" 
+		echo "# 4.EMCIO IO 控制器通过halcmd loadusr后台加载，处理 IO" | tee -a $PRINT_FILE
+		echo "# Starting LinuxCNC IO program: $EMCIO" | tee -a $PRINT_FILE
         if ! program_available $EMCIO ; then
                 echo "Can't execute IO program $EMCIO"
                 Cleanup
         exit 1
         fi
         $HALCMD loadusr -Wn iocontrol $EMCIO -ini "$INIFILE"
+        echo "# $HALCMD loadusr -Wn iocontrol $EMCIO -ini $INIFILE" | tee -a $PRINT_FILE
 else
-        echo "Skipping LinuxCNC IO program >>$PRINT_FILE"
+        echo "" 
+		echo "# 4.EMCIO IO 控制器通过halcmd loadusr后台加载，处理 IO" | tee -a $PRINT_FILE
+		echo "# Skipping LinuxCNC IO program >>$PRINT_FILE" | tee -a $PRINT_FILE
 fi
 
 # 4.3.5. Run halui in background, if necessary
 if [ -n "$HALUI" ] ; then
-    echo "Starting HAL User Interface program: $HALUI" >>$PRINT_FILE
+	echo "" 
+	echo "# 5.HALUI 后台加载，绑定 GUI 操作与 HAL 引脚" | tee -a $PRINT_FILE
+	echo "# Starting HAL User Interface program: $HALUI" | tee -a $PRINT_FILE
     if ! program_available $HALUI ; then
 	echo "Can't execute halui program $HALUI"
 	Cleanup
 	exit 1
     fi
     $HALCMD loadusr -Wn halui $HALUI -ini "$INIFILE"
+    echo "# $HALCMD loadusr -Wn halui $HALUI -ini $INIFILE" | tee -a $PRINT_FILE
 fi
 
 # 4.3.6. execute HALCMD config files (if any)
-
-echo "$(basename $0) TPMOD=$TPMOD HOMEMOD=$HOMEMOD EMCMOT=${EMCMOT%.*}"
+echo "" 
+echo "# 5.loadrt 加载 tpmod 轨迹、homemod 回零实时内核模块" | tee -a $PRINT_FILE
+echo "# $(basename $0) TPMOD=$TPMOD HOMEMOD=$HOMEMOD EMCMOT=${EMCMOT%.*}" | tee -a $PRINT_FILE
 eval $HALCMD loadrt "$TPMOD"
 eval $HALCMD loadrt "$HOMEMOD"
+echo "# $HALCMD loadrt $TPMOD" | tee -a $PRINT_FILE
+echo "# $HALCMD loadrt $HOMEMOD" | tee -a $PRINT_FILE
 
 TWOPASS=`$INIVAR -ini "$INIFILE" -var TWOPASS -sec HAL -num 1 2> /dev/null`
+echo "" 
+echo "# 6.????????" | tee -a $PRINT_FILE
+echo "# if [ -n $TWOPASS ] ; then" | tee -a $PRINT_FILE
 if [ -n "$TWOPASS" ] ; then
   # 4.3.6.1. if [HAL]TWOPASS is defined, handle all [HAL]HALFILE entries here:
-  CFGFILE=@EMC2_TCL_LIB_DIR@/twopass.tcl
+  CFGFILE=/usr/local/lib/tcltk/linuxcnc/twopass.tcl
   export PRINT_FILE # twopass can append to PRINT_FILE
   if ! haltcl -i "$INIFILE" $CFGFILE && [ "$DASHK" = "" ]; then
       Cleanup
@@ -938,22 +974,28 @@ fi
 
 
 # 4.3.7. Run task in background
-echo "Starting TASK program: $EMCTASK" >>$PRINT_FILE
+echo "" 
+echo "# 7.启动 TASK " | tee -a $PRINT_FILE
+echo "Starting TASK program: $EMCTASK" | tee -a $PRINT_FILE
 if ! program_available $EMCTASK ; then
     echo "Can't execute TASK program $EMCTASK"
     Cleanup
     exit 1
 fi
 
+echo "halcmd loadusr -Wn inihal $EMCTASK -ini $INIFILE &" 
 halcmd loadusr -Wn inihal $EMCTASK -ini "$INIFILE" &
 
 # 4.3.8. execute discrete HAL commands from INI file (if any)
 # get first command from INI file
+echo "" 
+echo "# 8.execute discrete HAL commands from INI file (if any)???????????? " | tee -a $PRINT_FILE
 NUM=1
 HALCOMMAND=`$INIVAR -ini "$INIFILE" -var HALCMD -sec HAL -num $NUM 2> /dev/null`
+echo "HALCOMMAND=`$INIVAR -ini "$INIFILE" -var HALCMD -sec HAL -num $NUM 2> /dev/null`" | tee -a $PRINT_FILE
 while [ -n "$HALCOMMAND" ] ; do
     if [ -n "$HALCOMMAND" ] ; then
-	echo "Running HAL command: $HALCOMMAND" >>$PRINT_FILE
+	echo "Running HAL command: $HALCOMMAND" | tee -a $PRINT_FILE
 	if ! $HALCMD $HALCOMMAND && [ "$DASHK" = "" ]; then
 	    echo "INI file HAL command $HALCOMMAND failed."
 	    Cleanup
@@ -963,16 +1005,25 @@ while [ -n "$HALCOMMAND" ] ; do
     # get next command from INI file
     NUM=$(($NUM+1))
     HALCOMMAND=`$INIVAR -ini "$INIFILE" -var HALCMD -sec HAL -num $NUM 2> /dev/null`
+	echo "HALCOMMAND=`$INIVAR -ini "$INIFILE" -var HALCMD -sec HAL -num $NUM 2> /dev/null`" | tee -a $PRINT_FILE
 done
 
 # 4.3.9. start the realtime stuff ticking
+echo "" 
+echo "# 9.启动 HALCMD " | tee -a $PRINT_FILE
+echo "$HALCMD start" | tee -a $PRINT_FILE
 $HALCMD start
 
 # 4.3.10. run other applications
+echo "" 
+echo "# 10.启动用户自定义后台程序??? " | tee -a $PRINT_FILE
+echo "run_applications" | tee -a $PRINT_FILE
 run_applications
 
 # 4.3.11. Run display in foreground
-echo "Starting DISPLAY program: $EMCDISPLAY" >>$PRINT_FILE
+echo "" 
+echo "# 11.启UI界面启动 " | tee -a $PRINT_FILE
+echo "Starting DISPLAY program: $EMCDISPLAY" | tee -a $PRINT_FILE
 result=0
 case $EMCDISPLAY in
   tklinuxcnc)
@@ -1000,10 +1051,19 @@ case $EMCDISPLAY in
         Cleanup
         exit 1
     fi
+    echo "$EMCDISPLAY -ini $INIFILE $EMCDISPLAYARGS $EXTRA_ARGS"
     $EMCDISPLAY -ini "$INIFILE" $EMCDISPLAYARGS $EXTRA_ARGS
     result=$?
   ;;
 esac
+echo "end" 
+echo "end" 
+echo "end" 
+echo "CloseUI" 
+echo "end" 
+echo "end" 
+echo "end" 
+
 
 # the display won't return until you shut it down,
 # so when you get here it's time to clean up
