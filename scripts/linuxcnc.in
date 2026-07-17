@@ -1024,6 +1024,9 @@ run_applications
 echo "" 
 echo "# 11.启UI界面启动 " | tee -a $PRINT_FILE
 echo "Starting DISPLAY program: $EMCDISPLAY" | tee -a $PRINT_FILE
+
+QTHMI=/home/test/Desktop/Qt_HMI/Debug/HMI
+
 result=0
 case $EMCDISPLAY in
   tklinuxcnc)
@@ -1044,7 +1047,20 @@ case $EMCDISPLAY in
   linuxcncrsh)
     $EMCDISPLAY $EMCDISPLAYARGS $EXTRA_ARGS -- -ini "$INIFILE"
   ;;
+  qt)
+    echo "[DISPLAY] DISPLAY = qt 会进入此分支" | tee -a $PRINT_FILE
+    # all other displays are assumed to be commands on the PATH
+    if ! program_available $QTHMI; then
+        echo "Can't execute DISPLAY program $QTHMI"
+        Cleanup
+        exit 1
+    fi
+    echo "$QTHMI "
+    $QTHMI
+    result=$?
+  ;;
   *)
+    echo "[DISPLAY] DISPLAY = axis 会进入此分支" | tee -a $PRINT_FILE
     # all other displays are assumed to be commands on the PATH
     if ! program_available $EMCDISPLAY; then
         echo "Can't execute DISPLAY program $EMCDISPLAY $EMCDISPLAYARGS $EXTRA_ARGS"
