@@ -580,6 +580,9 @@ GetFromIni DISPLAY DISPLAY
 EMCDISPLAY=`(set -- $retval ; echo $1 )`
 EMCDISPLAYARGS=`(set -- $retval ; shift ; echo $* )`
 
+GetFromIni DISPLAY QTHMIPATH
+QTHMIPATH=`(set -- $retval ; echo $1 )`
+
 case $EMCDISPLAY in
     tkemc) EMCDISPLAY=tklinuxcnc ;;
 esac
@@ -1025,7 +1028,7 @@ echo ""
 echo "# 11.启UI界面启动 " | tee -a $PRINT_FILE
 echo "Starting DISPLAY program: $EMCDISPLAY" | tee -a $PRINT_FILE
 
-QTHMI=/home/test/Desktop/Qt_HMI/Debug/HMI
+QTHMIPATH=/home/test/Desktop/Qt_HMI/Debug/HMI
 
 result=0
 case $EMCDISPLAY in
@@ -1049,14 +1052,15 @@ case $EMCDISPLAY in
   ;;
   qt)
     echo "[DISPLAY] DISPLAY = qt 会进入此分支" | tee -a $PRINT_FILE
+    echo "[DISPLAY] QTHMIPATH = $QTHMIPATH " | tee -a $PRINT_FILE
     # all other displays are assumed to be commands on the PATH
-    if ! program_available $QTHMI; then
-        echo "Can't execute DISPLAY program $QTHMI"
+    if ! program_available $QTHMIPATH; then
+        echo "Can't execute DISPLAY program $QTHMIPATH"
         Cleanup
         exit 1
     fi
-    echo "$QTHMI "
-    $QTHMI
+    echo "$QTHMIPATH "
+    $QTHMIPATH
     result=$?
   ;;
   *)
