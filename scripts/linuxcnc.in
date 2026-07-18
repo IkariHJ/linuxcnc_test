@@ -476,12 +476,14 @@ function GetFromIniQuiet {
 function GetFromIni {
     #$1 var name   $2 - section name
     name=$1
+    echo ""
     retval=`$INIVAR -ini "$INIFILE" -var $1 -sec $2 2>>$DEBUG_FILE`
+	echo "retval=$INIVAR -ini "$INIFILE" -var $1 -sec $2 2>>$DEBUG_FILE" | tee -a $PRINT_FILE
     if [ ! -n "$1" ] ; then
-	echo "Can't find variable $1 in section [$2] of file $INIFILE."
+	echo "Can't find variable $1 in section [$2] of file $INIFILE." | tee -a $PRINT_FILE
 	exit -1
     fi
-    echo "$name=$retval" >>$PRINT_FILE
+    echo "GetFromIni : $name=$retval"  | tee -a $PRINT_FILE
 }
 
 # Usage:
@@ -580,8 +582,10 @@ GetFromIni DISPLAY DISPLAY
 EMCDISPLAY=`(set -- $retval ; echo $1 )`
 EMCDISPLAYARGS=`(set -- $retval ; shift ; echo $* )`
 
-GetFromIni DISPLAY QTHMIPATH
+GetFromIni QTHMIPATH DISPLAY
 QTHMIPATH=`(set -- $retval ; echo $1 )`
+echo "[DISPLAY] QTHMIPATH = $QTHMIPATH " | tee -a $PRINT_FILE
+
 
 case $EMCDISPLAY in
     tkemc) EMCDISPLAY=tklinuxcnc ;;
@@ -1027,8 +1031,6 @@ run_applications
 echo "" 
 echo "# 11.启UI界面启动 " | tee -a $PRINT_FILE
 echo "Starting DISPLAY program: $EMCDISPLAY" | tee -a $PRINT_FILE
-
-QTHMIPATH=/home/test/Desktop/Qt_HMI/Debug/HMI
 
 result=0
 case $EMCDISPLAY in
