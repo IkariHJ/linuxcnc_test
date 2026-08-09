@@ -14,7 +14,7 @@
 #    
 # Copyright (c) 2004-2009 All rights reserved.
 ################################################################################
-
+# test is add install
 # -1. Get all rip-environment items if we are RIP
 # 1. RIP 本地编译运行判断
 if test "xyes" = "xno"; then

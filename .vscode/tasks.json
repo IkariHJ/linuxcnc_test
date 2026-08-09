@@ -17,7 +17,7 @@
         {
             "label": "02-configure uspace O0-g调试",
             "type": "shell",
-            "command": "CFLAGS=\"-O0 -g\" CXXFLAGS=\"-O0 -g\" ./autogen.sh && ./configure --with-realtime=uspace --enable-non-distributable=yes",
+            "command": "CFLAGS=\"-O0 -g\" CXXFLAGS=\"-O0 -g\" ./autogen.sh && ./configure --with-realtime=uspace --prefix=/usr/local --enable-non-distributable=yes --enable-non-distributable=yes --disable-build-documentation",
             "options": {
                 "cwd": "${workspaceFolder}/src"
             },
@@ -36,9 +36,9 @@
             "dependsOrder": "sequence"
         },
         {
-            "label": "03-1 sudo make setuid 权限配置",
+            "label": "04-make install 安装",
             "type": "shell",
-            "command": "sudo make setuid",
+            "command": "sudo make install",
             "options": {
                 "cwd": "${workspaceFolder}/src"
             },
@@ -46,14 +46,24 @@
             "dependsOrder": "sequence"
         },
         {
-            "label": "04-启动 LinuxCNC RIP 本地调试",
+            "label": "05-1 sudo make setuid 权限配置",
+            "type": "shell",
+            "command": "sudo make setuid",
+            "options": {
+                "cwd": "${workspaceFolder}/src"
+            },
+            "dependsOn": "04-make install 安装",
+            "dependsOrder": "sequence"
+        },
+        {
+            "label": "06-启动 LinuxCNC RIP 本地调试",
             "type": "shell",
             // 修复rip-environment正确相对路径
             "command": "source scripts/rip-environment && ./scripts/linuxcnc /home/test/Desktop/xe/x5e.ini",
             "options": {
                 "cwd": "${workspaceFolder}"
             },
-            "dependsOn": "03-1 sudo make setuid 权限配置",
+            "dependsOn": "05-1 sudo make setuid 权限配置",
             "dependsOrder": "sequence"
         },
         // 新增一键总任务，一键跑完完整全流程
@@ -61,7 +71,7 @@
             "label": "一键完整流程：清理→配置→编译→权限→启动",
             "type": "shell",
             "command": "",
-            "dependsOn": "04-启动 LinuxCNC RIP 本地调试",
+            "dependsOn": "06-启动 LinuxCNC RIP 本地调试",
             "dependsOrder": "sequence",
             "group": {
                 "kind": "build",
