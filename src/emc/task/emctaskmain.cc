@@ -496,33 +496,41 @@ static int checkInterpList(NML_INTERP_LIST * il, EMC_STAT * stat)
 }
 extern int emcTaskMopup();
 
+
+//	填充 interp_list 队列
 void readahead_reading(void)
 {
-    int readRetval;
-    int execRetval;
+    int readRetval;   // emcTaskPlanRead() 返回值：读取一行NC的结果
+    int execRetval;   // emcTaskPlanExecute(0) 返回值：执行解析出来的plan结果
 
 	if (interp_list.len() <= emc_task_interp_max_len) 
 	{
 		int count = 0;
+
+	// goto 标签
 	interpret_again:
+		// wait 标记，一旦置 true，直接停止预读新 NC 行
 		if (emcTaskPlanIsWait()) 
 		{
 			// delay reading of next line until all is done
-			if (interp_list.len() == 0 &&
-				emcTaskCommand == 0 &&
-				emcStatus->task.execState ==
-				EMC_TASK_EXEC_DONE) 
+			if (interp_list.len() == 0 &&							//预读缓冲队列全部清空
+				emcTaskCommand == 0 &&								//没有正在执行的 task 命令
+				emcStatus->task.execState == EMC_TASK_EXEC_DONE) 	//所有执行动作全部完成
 			{
+				// 清除 wait 标记，恢复预读。
 				emcTaskPlanClearWait();
 			}
 		} 
 		else 
 		{
+			// 读取 NC 文件下一行文本，送入译码
 			readRetval = emcTaskPlanRead();
 			/*! \todo MGS FIXME
 			This if() actually evaluates to if (readRetval != INTERP_OK)...
 			*** Need to look at all calls to things that return INTERP_xxx values! ***
 			MGS */
+			// 读取一行出现错误 / 文件结束 / 需要退出 / 需要等待完成：
+			// 把解释器状态切换为 EMC_TASK_INTERP_WAITING，退出预读逻辑。
 			if (readRetval > INTERP_MIN_ERROR
 				|| readRetval == INTERP_ENDFILE
 				|| readRetval == INTERP_EXIT
@@ -541,36 +549,49 @@ void readahead_reading(void)
 			{
 				// got a good line
 				// record the line number and command
+				// 通知HMI可以读到当前预读到那一行（非执行的行号）
 				emcStatus->task.readLine = emcTaskPlanLine();
 
+				// 把解析出来的 plan 指令拷贝到 task 全局状态，NML 共享内存对外暴露
 				emcTaskPlanCommand((char *) &emcStatus->task.command);
+
 				// and execute it
+				// 执行解析好的 plan
 				execRetval = emcTaskPlanExecute(0);
+
 				// line number may need update after
 				// returns from subprograms in external
 				// files
+				// 重新同步行号
 				emcStatus->task.readLine = emcTaskPlanLine();
+
+				// 译码发生错误
 				if (execRetval > INTERP_MIN_ERROR) 
 				{
 					emcStatus->task.interpState = EMC_TASK_INTERP_WAITING;
 					interp_list.clear();
 					emcAbortCleanup(EMC_ABORT_INTERPRETER_ERROR, "interpreter error"); 
 				} 
-				else if (execRetval == -1
-					|| execRetval == INTERP_EXIT ) 
+				// 译码返回需要退出
+				else if (execRetval == -1 || execRetval == INTERP_EXIT ) 
 				{
 					emcStatus->task.interpState = EMC_TASK_INTERP_WAITING;
 				} 
+				// 译码返回需要等待执行完成
 				else if (execRetval == INTERP_EXECUTE_FINISH) 
 				{
 					// INTERP_EXECUTE_FINISH signifies
 					// that no more reading should be done until
 					// everything
 					// outstanding is completed
+					// 置位全局 wait 标记 → readahead 不再读取新 NC 行
 					emcTaskPlanSetWait();
+
 					// and resynch interp WM
+					// 下发同步命令、做状态同步
 					emcTaskQueueCommand(&taskPlanSynchCmd);
 				} 
+				// 译码返回文件结束
 				else if (execRetval != 0) 
 				{
 					// end of file
@@ -578,6 +599,7 @@ void readahead_reading(void)
 					emcStatus->task.motionLine = 0;
 					emcStatus->task.readLine = 0;
 				} 
+				// 译码返回正常
 				else 
 				{
 
@@ -587,10 +609,10 @@ void readahead_reading(void)
 				// throw the results away if we're supposed to
 				// read
 				// through it
-				if ( programStartLine != 0 &&
-					emcTaskPlanLevel() == 0 &&
-					( programStartLine < 0 ||
-					emcTaskPlanLine() <= programStartLine )) 
+				// 程序从指定行启动（run‑from‑line）逻辑
+				// 不是从头运行，而是从中间某行启动 
+				// 预读到启动行之前的代码，只做语法校验，直接丢弃不执行，清空interp_list
+				if ( programStartLine != 0 && emcTaskPlanLevel() == 0 && ( programStartLine < 0 || emcTaskPlanLine() <= programStartLine )) 
 				{
 					// we're stepping over lines, so check them
 					// for
@@ -601,13 +623,15 @@ void readahead_reading(void)
 						// did
 						// for a bad read from emcTaskPlanRead()
 						// above
-						emcStatus->task.interpState =
-						EMC_TASK_INTERP_WAITING;
+						emcStatus->task.interpState = EMC_TASK_INTERP_WAITING;
 					}
 					// and clear it regardless
 					interp_list.clear();
 				}
 
+				// 依然是 run‑from‑line 逻辑：
+				// 跳过启动行之前代码的时候，更新 canon 内部坐标
+				// 到达启动行时执行同步，清空标记，正式开始运行程序
 				if (emcStatus->task.readLine < programStartLine && emcTaskPlanLevel() == 0) 
 				{
 					//update the position with our current position, as the other positions are only skipped through
@@ -632,6 +656,9 @@ void readahead_reading(void)
 					}
 				}
 
+				// count < max_len：本函数单次调用预读行数上限，防止单周期卡死
+				// 解释器状态仍然是 READING
+				// 缓冲队列占用不超过 2/3，避免打满
 				if (count++ < emc_task_interp_max_len
 						&& emcStatus->task.interpState == EMC_TASK_INTERP_READING
 						&& interp_list.len() <= emc_task_interp_max_len * 2/3) 
