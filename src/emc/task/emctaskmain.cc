@@ -2646,328 +2646,378 @@ static int emcTaskExecute(void)
     pid_t pid;			// pid returned from waitpid()
 
     // first check for an abandoned system command and abort it
-    if (emcSystemCmdPid != 0 &&
-	emcStatus->task.execState !=
-	EMC_TASK_EXEC_WAITING_FOR_SYSTEM_CMD) {
-	if (emc_debug & EMC_DEBUG_TASK_ISSUE) {
-	    rcs_print("emcSystemCmd: abandoning process %d\n",
-		      emcSystemCmdPid);
-	}
-	kill(emcSystemCmdPid, SIGINT);
-	emcSystemCmdPid = 0;
+    if (emcSystemCmdPid != 0 && emcStatus->task.execState != EMC_TASK_EXEC_WAITING_FOR_SYSTEM_CMD) 
+	{
+		if (emc_debug & EMC_DEBUG_TASK_ISSUE) 
+		{
+			rcs_print("emcSystemCmd: abandoning process %d\n", emcSystemCmdPid);
+		}
+		kill(emcSystemCmdPid, SIGINT);
+		emcSystemCmdPid = 0;
     }
 
-    switch (emcStatus->task.execState) {
+    switch (emcStatus->task.execState) 
+	{
     case EMC_TASK_EXEC_ERROR:
 
-	/*! \todo FIXME-- duplicate code for abort,
-	   also near end of main, when aborting on subordinate errors,
-	   and in emcTaskIssueCommand() */
+		/*! \todo FIXME-- duplicate code for abort,
+		also near end of main, when aborting on subordinate errors,
+		and in emcTaskIssueCommand() */
 
-	// abort everything
-	emcTaskAbort();
-        emcIoAbort(EMC_ABORT_TASK_EXEC_ERROR);
-    for (int s = 0; s < emcStatus->motion.traj.spindles; s++) emcSpindleAbort(s);
-	mdi_execute_abort();
+		// abort everything
+		emcTaskAbort();
+		emcIoAbort(EMC_ABORT_TASK_EXEC_ERROR);
+		for (int s = 0; s < emcStatus->motion.traj.spindles; s++) 
+		{
+			emcSpindleAbort(s);
+		}
+		mdi_execute_abort();
 
-	// without emcTaskPlanClose(), a new run command resumes at
-	// aborted line-- feature that may be considered later
-	{
-	    int was_open = taskplanopen;
-	    emcTaskPlanClose();
-            emcTaskPlanReset();  // Flush any unflushed segments
-	    if (emc_debug & EMC_DEBUG_INTERP && was_open) {
-		rcs_print("emcTaskPlanClose() called at %s:%d\n", __FILE__,
-			  __LINE__);
-	    }
-	}
+		// without emcTaskPlanClose(), a new run command resumes at
+		// aborted line-- feature that may be considered later
+		{
+			int was_open = taskplanopen;
+			emcTaskPlanClose();
+			emcTaskPlanReset();  // Flush any unflushed segments
+			if (emc_debug & EMC_DEBUG_INTERP && was_open) 
+			{
+				rcs_print("emcTaskPlanClose() called at %s:%d\n", __FILE__, __LINE__);
+			}
+		}
 
-	// clear out pending command
-	emcTaskCommand = 0;
-	interp_list.clear();
-	emcAbortCleanup(EMC_ABORT_TASK_EXEC_ERROR);
-        emcStatus->task.currentLine = 0;
+		// clear out pending command
+		emcTaskCommand = 0;
+		interp_list.clear();
+		emcAbortCleanup(EMC_ABORT_TASK_EXEC_ERROR);
+		emcStatus->task.currentLine = 0;
 
-	// clear out the interpreter state
-	emcStatus->task.interpState = EMC_TASK_INTERP_IDLE;
-	emcStatus->task.execState = EMC_TASK_EXEC_DONE;
-	stepping = 0;
-	steppingWait = 0;
+		// clear out the interpreter state
+		emcStatus->task.interpState = EMC_TASK_INTERP_IDLE;
+		emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+		stepping = 0;
+		steppingWait = 0;
 
-	// now queue up command to resynch interpreter
-	emcTaskQueueCommand(&taskPlanSynchCmd);
+		// now queue up command to resynch interpreter
+		emcTaskQueueCommand(&taskPlanSynchCmd);
 
-	retval = -1;
-	break;
+		retval = -1;
+		break;
 
     case EMC_TASK_EXEC_DONE:
-	STEPPING_CHECK();
-	if (!emcStatus->motion.traj.queueFull &&
-	    emcStatus->task.interpState != EMC_TASK_INTERP_PAUSED) {
-	    if (0 == emcTaskCommand) {
-		// need a new command
-		emcTaskCommand = interp_list.get();
-		// interp_list now has line number associated with this-- get
-		// it
-		if (0 != emcTaskCommand) {
-		    emcTaskEager = 1;
-		    emcStatus->task.currentLine =
-			interp_list.get_line_number();
-		    emcStatus->task.callLevel = emcTaskPlanLevel();
-		    // and set it for all subsystems which use queued ids
-		    emcTrajSetMotionId(emcStatus->task.currentLine);
-		    if (emcStatus->motion.traj.queueFull) {
-			emcStatus->task.execState =
-			    EMC_TASK_EXEC_WAITING_FOR_MOTION_QUEUE;
-		    } else {
-			emcStatus->task.execState =
-			    (enum EMC_TASK_EXEC_ENUM)
-			    emcTaskCheckPreconditions(emcTaskCommand);
-		    }
+		STEPPING_CHECK();
+		if (!emcStatus->motion.traj.queueFull && emcStatus->task.interpState != EMC_TASK_INTERP_PAUSED) 
+		{
+			if (0 == emcTaskCommand) 
+			{
+				// need a new command
+				emcTaskCommand = interp_list.get();
+				// interp_list now has line number associated with this-- get
+				// it
+				if (0 != emcTaskCommand) 
+				{
+					emcTaskEager = 1;
+					emcStatus->task.currentLine = interp_list.get_line_number();
+					emcStatus->task.callLevel = emcTaskPlanLevel();
+					// and set it for all subsystems which use queued ids
+					emcTrajSetMotionId(emcStatus->task.currentLine);
+					if (emcStatus->motion.traj.queueFull) 
+					{
+						emcStatus->task.execState = EMC_TASK_EXEC_WAITING_FOR_MOTION_QUEUE;
+					} 
+					else 
+					{
+						emcStatus->task.execState = (enum EMC_TASK_EXEC_ENUM) emcTaskCheckPreconditions(emcTaskCommand);
+					}
+				}
+			} 
+			else 
+			{
+				// have an outstanding command
+				if (0 != emcTaskIssueCommand(emcTaskCommand)) 
+				{
+					emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+					retval = -1;
+				} 
+				else 
+				{
+					emcStatus->task.execState = (enum EMC_TASK_EXEC_ENUM)
+					emcTaskCheckPostconditions(emcTaskCommand);
+					emcTaskEager = 1;
+				}
+				emcTaskCommand = 0;	// reset it
+			}
 		}
-	    } else {
-		// have an outstanding command
-		if (0 != emcTaskIssueCommand(emcTaskCommand)) {
-		    emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
-		    retval = -1;
-		} else {
-		    emcStatus->task.execState = (enum EMC_TASK_EXEC_ENUM)
-			emcTaskCheckPostconditions(emcTaskCommand);
-		    emcTaskEager = 1;
-		}
-		emcTaskCommand = 0;	// reset it
-	    }
-	}
-	break;
+		break;
 
     case EMC_TASK_EXEC_WAITING_FOR_MOTION_QUEUE:
-	STEPPING_CHECK();
-	if (!emcStatus->motion.traj.queueFull) {
-	    if (0 != emcTaskCommand) {
-		emcStatus->task.execState = (enum EMC_TASK_EXEC_ENUM)
-		    emcTaskCheckPreconditions(emcTaskCommand);
-		emcTaskEager = 1;
-	    } else {
-		emcStatus->task.execState = EMC_TASK_EXEC_DONE;
-		emcTaskEager = 1;
-	    }
-	}
-	break;
+		STEPPING_CHECK();
+		if (!emcStatus->motion.traj.queueFull) 
+		{
+			if (0 != emcTaskCommand) 
+			{
+				emcStatus->task.execState = (enum EMC_TASK_EXEC_ENUM)
+				emcTaskCheckPreconditions(emcTaskCommand);
+				emcTaskEager = 1;
+			} 
+			else 
+			{
+				emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+				emcTaskEager = 1;
+			}
+		}
+		break;
 
     case EMC_TASK_EXEC_WAITING_FOR_MOTION:
-	STEPPING_CHECK();
-	if (emcStatus->motion.status == RCS_ERROR) {
-	    // emcOperatorError(0, "error in motion controller");
-	    emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
-	} else if (emcStatus->motion.status == RCS_DONE) {
-	    emcStatus->task.execState = EMC_TASK_EXEC_DONE;
-	    emcTaskEager = 1;
-	}
-	break;
+		STEPPING_CHECK();
+		if (emcStatus->motion.status == RCS_ERROR) 
+		{
+			// emcOperatorError(0, "error in motion controller");
+			emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+		} 
+		else if (emcStatus->motion.status == RCS_DONE) 
+		{
+			emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+			emcTaskEager = 1;
+		}
+		break;
 
     case EMC_TASK_EXEC_WAITING_FOR_IO:
-	STEPPING_CHECK();
-	if (emcStatus->io.status == RCS_ERROR) {
-	    // emcOperatorError(0, "error in IO controller");
-	    emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
-	} else if (emcStatus->io.status == RCS_DONE) {
-	    emcStatus->task.execState = EMC_TASK_EXEC_DONE;
-	    emcTaskEager = 1;
-	}
-	break;
+		STEPPING_CHECK();
+		if (emcStatus->io.status == RCS_ERROR) 
+		{
+			// emcOperatorError(0, "error in IO controller");
+			emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+		} 
+		else if (emcStatus->io.status == RCS_DONE) 
+		{
+			emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+			emcTaskEager = 1;
+		}
+		break;
 
     case EMC_TASK_EXEC_WAITING_FOR_MOTION_AND_IO:
-	STEPPING_CHECK();
-	if (emcStatus->motion.status == RCS_ERROR) {
-	    // emcOperatorError(0, "error in motion controller");
-	    emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
-	} else if (emcStatus->io.status == RCS_ERROR) {
-	    // emcOperatorError(0, "error in IO controller");
-	    emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
-	} else if (emcStatus->motion.status == RCS_DONE &&
-		   emcStatus->io.status == RCS_DONE) {
-	    emcStatus->task.execState = EMC_TASK_EXEC_DONE;
-	    emcTaskEager = 1;
-	}
-	break;
+		STEPPING_CHECK();
+		if (emcStatus->motion.status == RCS_ERROR) 
+		{
+			// emcOperatorError(0, "error in motion controller");
+			emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+		} 
+		else if (emcStatus->io.status == RCS_ERROR) 
+		{
+			// emcOperatorError(0, "error in IO controller");
+			emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+		} 
+		else if (emcStatus->motion.status == RCS_DONE && emcStatus->io.status == RCS_DONE) 
+		{
+			emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+			emcTaskEager = 1;
+		}
+		break;
 
     case EMC_TASK_EXEC_WAITING_FOR_SPINDLE_ORIENTED:
-	STEPPING_CHECK(); // not sure
-	{int state = 0;
-		for (int n = 0; n < emcStatus->motion.traj.spindles; n++){
-			if (emcStatus->motion.spindle[n].orient_state > state)
-				state = emcStatus->motion.spindle[n].orient_state;
-		}
-	switch (state) {
-		case EMCMOT_ORIENT_NONE:
-		case EMCMOT_ORIENT_COMPLETE:
-			emcStatus->task.execState = EMC_TASK_EXEC_DONE;
-			emcStatus->task.delayLeft = 0;
-			emcTaskEager = 1;
-			rcs_print("wait for orient complete: nothing to do\n");
-			break;
-
-		case EMCMOT_ORIENT_IN_PROGRESS:
-			emcStatus->task.delayLeft = taskExecDelayTimeout - etime();
-			if (etime() >= taskExecDelayTimeout) {
-			emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
-			emcStatus->task.delayLeft = 0;
-			emcTaskEager = 1;
-			emcOperatorError(0, "wait for orient complete: TIMED OUT");
+		STEPPING_CHECK(); // not sure
+		{
+			int state = 0;
+			for (int n = 0; n < emcStatus->motion.traj.spindles; n++)
+			{
+				if (emcStatus->motion.spindle[n].orient_state > state)
+				{
+					state = emcStatus->motion.spindle[n].orient_state;
+				}
 			}
-			break;
+			switch (state) 
+			{
+				case EMCMOT_ORIENT_NONE:
+				case EMCMOT_ORIENT_COMPLETE:
+					emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+					emcStatus->task.delayLeft = 0;
+					emcTaskEager = 1;
+					rcs_print("wait for orient complete: nothing to do\n");
+					break;
 
-		case EMCMOT_ORIENT_FAULTED:
-			// actually the code in main() should trap this before we get here
-			emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
-			emcStatus->task.delayLeft = 0;
-			emcTaskEager = 1;
-			for (int n = 0; n < emcStatus->motion.traj.spindles; n++){
-				if (emcStatus->motion.spindle[n].orient_fault)
-						emcOperatorError(0, "wait for orient complete: FAULTED code=%d",
-						emcStatus->motion.spindle[n].orient_fault);
+				case EMCMOT_ORIENT_IN_PROGRESS:
+					emcStatus->task.delayLeft = taskExecDelayTimeout - etime();
+					if (etime() >= taskExecDelayTimeout) 
+					{
+						emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+						emcStatus->task.delayLeft = 0;
+						emcTaskEager = 1;
+						emcOperatorError(0, "wait for orient complete: TIMED OUT");
+					}
+					break;
+
+				case EMCMOT_ORIENT_FAULTED:
+					// actually the code in main() should trap this before we get here
+					emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+					emcStatus->task.delayLeft = 0;
+					emcTaskEager = 1;
+					for (int n = 0; n < emcStatus->motion.traj.spindles; n++)
+					{
+						if (emcStatus->motion.spindle[n].orient_fault)
+						{
+							emcOperatorError(0, "wait for orient complete: FAULTED code=%d", emcStatus->motion.spindle[n].orient_fault);
+						}
+					}
 			}
 		}
-	}
-	break;
+		break;
 
     case EMC_TASK_EXEC_WAITING_FOR_DELAY:
-	STEPPING_CHECK();
-	// check if delay has passed
-	emcStatus->task.delayLeft = taskExecDelayTimeout - etime();
-	if (etime() >= taskExecDelayTimeout) {
-	    emcStatus->task.execState = EMC_TASK_EXEC_DONE;
-	    emcStatus->task.delayLeft = 0;
-	    if (emcStatus->task.input_timeout != 0)
-		emcStatus->task.input_timeout = 1; // timeout occurred
-	    emcTaskEager = 1;
-	}
-	// delay can be also be because we wait for an input
-	// if the index is set (not -1)
-	if (emcAuxInputWaitIndex >= 0) { 
-	    switch (emcAuxInputWaitType) {
-		case WAIT_MODE_HIGH:
-		    if (emcStatus->motion.synch_di[emcAuxInputWaitIndex] != 0) {
-			emcStatus->task.input_timeout = 0; // clear timeout flag
-			emcAuxInputWaitIndex = -1;
+		STEPPING_CHECK();
+		// check if delay has passed
+		emcStatus->task.delayLeft = taskExecDelayTimeout - etime();
+		if (etime() >= taskExecDelayTimeout) {
 			emcStatus->task.execState = EMC_TASK_EXEC_DONE;
 			emcStatus->task.delayLeft = 0;
-		    }
-		    break;
+			if (emcStatus->task.input_timeout != 0)
+			emcStatus->task.input_timeout = 1; // timeout occurred
+			emcTaskEager = 1;
+		}
+		// delay can be also be because we wait for an input
+		// if the index is set (not -1)
+		if (emcAuxInputWaitIndex >= 0) 
+		{ 
+			switch (emcAuxInputWaitType) 
+			{
+				case WAIT_MODE_HIGH:
+					if (emcStatus->motion.synch_di[emcAuxInputWaitIndex] != 0) 
+					{
+						emcStatus->task.input_timeout = 0; // clear timeout flag
+						emcAuxInputWaitIndex = -1;
+						emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+						emcStatus->task.delayLeft = 0;
+					}
+					break;
 
-    		case WAIT_MODE_RISE: 
-		    if (emcStatus->motion.synch_di[emcAuxInputWaitIndex] == 0) {
-			emcAuxInputWaitType = WAIT_MODE_HIGH;
-		    }
-		    break;
-		    
-		case WAIT_MODE_LOW:
-		    if (emcStatus->motion.synch_di[emcAuxInputWaitIndex] == 0) {
-			emcStatus->task.input_timeout = 0; // clear timeout flag
-			emcAuxInputWaitIndex = -1;
-			emcStatus->task.execState = EMC_TASK_EXEC_DONE;
-			emcStatus->task.delayLeft = 0;
-		    }
-		    break;
+					case WAIT_MODE_RISE: 
+					if (emcStatus->motion.synch_di[emcAuxInputWaitIndex] == 0) 
+					{
+						emcAuxInputWaitType = WAIT_MODE_HIGH;
+					}
+					break;
+					
+				case WAIT_MODE_LOW:
+					if (emcStatus->motion.synch_di[emcAuxInputWaitIndex] == 0) 
+					{
+						emcStatus->task.input_timeout = 0; // clear timeout flag
+						emcAuxInputWaitIndex = -1;
+						emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+						emcStatus->task.delayLeft = 0;
+					}
+					break;
 
-		case WAIT_MODE_FALL: //FIXME: implement different fall mode if needed
-		    if (emcStatus->motion.synch_di[emcAuxInputWaitIndex] != 0) {
-			emcAuxInputWaitType = WAIT_MODE_LOW;
-		    }
-		    break;
+				case WAIT_MODE_FALL: //FIXME: implement different fall mode if needed
+					if (emcStatus->motion.synch_di[emcAuxInputWaitIndex] != 0) 
+					{
+						emcAuxInputWaitType = WAIT_MODE_LOW;
+					}
+					break;
 
-		case WAIT_MODE_IMMEDIATE:
-		    emcStatus->task.input_timeout = 0; // clear timeout flag
-		    emcAuxInputWaitIndex = -1;
-		    emcStatus->task.execState = EMC_TASK_EXEC_DONE;
-		    emcStatus->task.delayLeft = 0;
-		    break;
-		
-		default:
-		    emcOperatorError(0, "Unknown Wait Mode");
-	    }
-	}
-	break;
+				case WAIT_MODE_IMMEDIATE:
+					emcStatus->task.input_timeout = 0; // clear timeout flag
+					emcAuxInputWaitIndex = -1;
+					emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+					emcStatus->task.delayLeft = 0;
+					break;
+				
+				default:
+					emcOperatorError(0, "Unknown Wait Mode");
+			}
+		}
+		break;
 
     case EMC_TASK_EXEC_WAITING_FOR_SYSTEM_CMD:
-	STEPPING_CHECK();
+		STEPPING_CHECK();
 
-	// if we got here without a system command pending, say we're done
-	if (0 == emcSystemCmdPid) {
-	    emcStatus->task.execState = EMC_TASK_EXEC_DONE;
-	    break;
-	}
-	// check the status of the system command
-	pid = waitpid(emcSystemCmdPid, &status, WNOHANG);
-
-	if (0 == pid) {
-	    // child is still executing
-	    break;
-	}
-
-	if (-1 == pid) {
-	    // execution error
-	    if (emc_debug & EMC_DEBUG_TASK_ISSUE) {
-		rcs_print("emcSystemCmd: error waiting for %d\n",
-			  emcSystemCmdPid);
-	    }
-	    emcSystemCmdPid = 0;
-	    emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
-	    break;
-	}
-
-	if (emcSystemCmdPid != pid) {
-	    // somehow some other child finished, which is a coding error
-	    if (emc_debug & EMC_DEBUG_TASK_ISSUE) {
-		rcs_print
-		    ("emcSystemCmd: error waiting for system command %d, we got %d\n",
-		     emcSystemCmdPid, pid);
-	    }
-	    emcSystemCmdPid = 0;
-	    emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
-	    break;
-	}
-	// else child has finished
-	if (WIFEXITED(status)) {
-	    if (0 == WEXITSTATUS(status)) {
-		// child exited normally
-		emcSystemCmdPid = 0;
-		emcStatus->task.execState = EMC_TASK_EXEC_DONE;
-		emcTaskEager = 1;
-	    } else {
-		// child exited with non-zero status
-		if (emc_debug & EMC_DEBUG_TASK_ISSUE) {
-		    rcs_print
-			("emcSystemCmd: system command %d exited abnormally with value %d\n",
-			 emcSystemCmdPid, WEXITSTATUS(status));
+		// if we got here without a system command pending, say we're done
+		if (0 == emcSystemCmdPid) 
+		{
+			emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+			break;
 		}
-		emcSystemCmdPid = 0;
-		emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
-	    }
-	} else if (WIFSIGNALED(status)) {
-	    // child exited with an uncaught signal
-	    if (emc_debug & EMC_DEBUG_TASK_ISSUE) {
-		rcs_print("system command %d terminated with signal %d\n",
-			  emcSystemCmdPid, WTERMSIG(status));
-	    }
-	    emcSystemCmdPid = 0;
-	    emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
-	} else if (WIFSTOPPED(status)) {
-	    // child is currently being traced, so keep waiting
-	} else {
-	    // some other status, we'll call this an error
-	    emcSystemCmdPid = 0;
-	    emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
-	}
-	break;
+		// check the status of the system command
+		pid = waitpid(emcSystemCmdPid, &status, WNOHANG);
+
+		if (0 == pid) 
+		{
+			// child is still executing
+			break;
+		}
+
+		if (-1 == pid) 
+		{
+			// execution error
+			if (emc_debug & EMC_DEBUG_TASK_ISSUE) 
+			{
+				rcs_print("emcSystemCmd: error waiting for %d\n", emcSystemCmdPid);
+			}
+			emcSystemCmdPid = 0;
+			emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+			break;
+		}
+
+		if (emcSystemCmdPid != pid) 
+		{
+			// somehow some other child finished, which is a coding error
+			if (emc_debug & EMC_DEBUG_TASK_ISSUE) 
+			{
+				rcs_print ("emcSystemCmd: error waiting for system command %d, we got %d\n", emcSystemCmdPid, pid);
+			}
+			emcSystemCmdPid = 0;
+			emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+			break;
+		}
+		// else child has finished
+		if (WIFEXITED(status)) 
+		{
+			if (0 == WEXITSTATUS(status)) 
+			{
+				// child exited normally
+				emcSystemCmdPid = 0;
+				emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+				emcTaskEager = 1;
+			} 
+			else 
+			{
+				// child exited with non-zero status
+				if (emc_debug & EMC_DEBUG_TASK_ISSUE) 
+				{
+					rcs_print ("emcSystemCmd: system command %d exited abnormally with value %d\n", emcSystemCmdPid, WEXITSTATUS(status));
+				}
+				emcSystemCmdPid = 0;
+				emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+			}
+		}
+		else if (WIFSIGNALED(status)) 
+		{
+			// child exited with an uncaught signal
+			if (emc_debug & EMC_DEBUG_TASK_ISSUE) 
+			{
+				rcs_print("system command %d terminated with signal %d\n", emcSystemCmdPid, WTERMSIG(status));
+			}
+			emcSystemCmdPid = 0;
+			emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+		} 
+		else if (WIFSTOPPED(status)) 
+		{
+			// child is currently being traced, so keep waiting
+		} 
+		else 
+		{
+			// some other status, we'll call this an error
+			emcSystemCmdPid = 0;
+			emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+		}
+		break;
 
     default:
-	// coding error
-	if (emc_debug & EMC_DEBUG_TASK_ISSUE) {
-	    rcs_print_error("invalid execState");
-	}
-	retval = -1;
-	break;
+		// coding error
+		if (emc_debug & EMC_DEBUG_TASK_ISSUE) 
+		{
+			rcs_print_error("invalid execState");
+		}
+		retval = -1;
+		break;
     }
     return retval;
 }
