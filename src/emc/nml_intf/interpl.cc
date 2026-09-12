@@ -140,6 +140,9 @@ NMLmsg *NML_INTERP_LIST::get()
     line_number = node_ptr->line_number;
 
     // get it off the front
+    // 获取emcTaskCommand
+    // NML_INTERP_LIST_NODE temp_node;
+    // char commandbuf[MAX_NML_COMMAND_SIZE];	// the NML command;
     ret = (NMLmsg *) ((char *) node_ptr->command.commandbuf);
 
     if (emc_debug & EMC_DEBUG_INTERP_LIST) {

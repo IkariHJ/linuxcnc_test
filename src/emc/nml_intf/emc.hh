@@ -133,6 +133,9 @@ struct PM_CARTESIAN;
 #define EMC_TRAJ_SET_FH_ENABLE_TYPE                  ((NMLTYPE) 236)
 #define EMC_TRAJ_RIGID_TAP_TYPE                      ((NMLTYPE) 237)
 
+// M代码相关
+#define EMC_MCODE_TYPE                               ((NMLTYPE) 240)
+
 #define EMC_TRAJ_STAT_TYPE                           ((NMLTYPE) 299)
 
 // EMC_MOTION aggregate class type declaration
@@ -270,7 +273,8 @@ enum EMC_TASK_EXEC_ENUM {
     EMC_TASK_EXEC_WAITING_FOR_MOTION_AND_IO = 7,
     EMC_TASK_EXEC_WAITING_FOR_DELAY = 8,
     EMC_TASK_EXEC_WAITING_FOR_SYSTEM_CMD = 9,
-    EMC_TASK_EXEC_WAITING_FOR_SPINDLE_ORIENTED = 10
+    EMC_TASK_EXEC_WAITING_FOR_SPINDLE_ORIENTED = 10,
+    EMC_TASK_EXEC_WAITING_FOR_M_CODES = 11,
 };
 
 // types for EMC_TASK interpState

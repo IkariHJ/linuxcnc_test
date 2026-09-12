@@ -45,6 +45,10 @@
             "dependsOn": "03-make -j$(nproc) 并行编译",
             "dependsOrder": "sequence"
         },
+
+
+
+
         {
             "label": "05-1 sudo make setuid 权限配置",
             "type": "shell",
@@ -66,9 +70,45 @@
             "dependsOn": "05-1 sudo make setuid 权限配置",
             "dependsOrder": "sequence"
         },
+
+
+        {
+            "label": "07-1 sudo make setuid 权限配置",
+            "type": "shell",
+            "command": "sudo make setuid",
+            "options": {
+                "cwd": "${workspaceFolder}/src"
+            },
+            "dependsOn": "03-make -j$(nproc) 并行编译",
+            "dependsOrder": "sequence"
+        },
+        {
+            "label": "08-启动 LinuxCNC RIP 本地调试",
+            "type": "shell",
+            // 修复rip-environment正确相对路径
+            "command": "source scripts/rip-environment && ./scripts/linuxcnc /home/test/Desktop/xe/x5e.ini",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "07-1 sudo make setuid 权限配置",
+            "dependsOrder": "sequence"
+        },
+
+
         // 新增一键总任务，一键跑完完整全流程
         {
-            "label": "一键完整流程：清理→配置→编译→权限→启动",
+            "label": "一键完整流程：清理→配置→编译→不安装→权限→启动",
+            "type": "shell",
+            "command": "",
+            "dependsOn": "08-启动 LinuxCNC RIP 本地调试",
+            "dependsOrder": "sequence",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "一键完整流程：清理→配置→编译→安装→权限→启动",
             "type": "shell",
             "command": "",
             "dependsOn": "06-启动 LinuxCNC RIP 本地调试",
@@ -78,7 +118,7 @@
                 "isDefault": true
             }
         },
-                {
+        {
             "label": "不编译，只运行",
             "type": "shell",
             // 修复rip-environment正确相对路径

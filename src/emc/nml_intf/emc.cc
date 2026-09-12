@@ -1984,7 +1984,27 @@ void EMC_TASK_STAT::update(CMS * cms)
     cms->update(input_timeout);
     cms->update(rotation_xy);
 
-}
+    // ★ 新增：M代码列表（给PLC读取）序列化
+    for (int i = 0; i < EMC_MAX_MCODE_LIST; i++) 
+    {
+        cms->update(mcodeListWithPLC[i].p);
+        cms->update(mcodeListWithPLC[i].q);
+        cms->update(mcodeListWithPLC[i].state);
+    }
+
+    // ★ 新增：当前行M代码上下文序列化
+    cms->update(mcodeCtx.activeMcodeListCount);
+    cms->update(mcodeCtx.writeSeq);
+
+    for (int i = 0; i < 16; i++) 
+    {
+        cms->update(mcodeCtx.activeMCodeList[i].mNumber);
+        cms->update(mcodeCtx.activeMCodeList[i].hasP);
+        cms->update(mcodeCtx.activeMCodeList[i].pValue);
+        cms->update(mcodeCtx.activeMCodeList[i].hasQ);
+        cms->update(mcodeCtx.activeMCodeList[i].qValue);
+        cms->update(mcodeCtx.activeMCodeList[i].seq);
+    }}
 
 /*
 *	NML/CMS Update function for EMC_TOOL_ABORT

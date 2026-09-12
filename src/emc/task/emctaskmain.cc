@@ -778,6 +778,7 @@ void readahead_waiting(void)
         }
 }
 
+// 填充emcCommand
 static bool allow_while_idle_type() {
     // allow for EMC_TASK_MODE_AUTO, EMC_TASK_MODE_MDI
     // expect immediate command
@@ -1665,6 +1666,22 @@ static int emcTaskCheckPreconditions(NMLmsg * cmd)
     case EMC_EXEC_PLUGIN_CALL_TYPE:
     case EMC_IO_PLUGIN_CALL_TYPE:
 	return EMC_TASK_EXEC_DONE;
+	break;
+
+    case EMC_MCODE_TYPE:
+	// 在此处对译码识别的M代码进行置位
+
+	// 1、对emcStatus->MCodes.ActiveMCode数组置位，表示当前正在执行的M代码
+    // 步骤1： emcStatus->MCodes.ActiveMCode = ((EMC_M_CODE_MEG *) cmd)->activemcode;
+    // 步骤2： 判断emcStatus->MCodes.ActiveMCode 是否有被触发的M代码，有：继续执行步骤3，没有：返回EMC_TASK_EXEC_DONE
+
+	// 2、对emcStatus->MCodes.MCodeList数组进行置位，表示当前正在执行的M代码的状态，供PLC使用（此数组PLC需要对其进行复位！！！）
+    // 步骤1： 通过emcStatus->MCodes.ActiveMCode中被触发ID,做index对emcStatus->MCodes.MCodeList进行置位，表示当前正在执行的M代码的状态
+
+
+	// emcStatus->MCodes.ActiveMCode数组存的是Index,例如：当前在跑三个M代码，数组长度为3，数组内容为[1,2,3]，表示当前正在执行M1、M2、M3
+	// emcStatus->MCodes.ActiveMCode数组最大长度为10,意味译码出来的M代码最多支持10个同时执行
+	return EMC_TASK_EXEC_WAITING_FOR_M_CODES;
 	break;
 
 
@@ -2638,6 +2655,23 @@ if (stepping) {                                                            \
   }                                                                        \
 }
 
+// 重置本行M代码上下文（一行执行完毕后调用）
+static void mcode_ctx_reset(EMC_TASK_MCODE_CTX *ctx)
+{
+    ctx->activeMcodeListCount = 0;
+    // writeSeq 不重置
+    for (int i = 0; i < EMC_MAX_ACTIVE_MCODE_LIST; i++)
+    {
+        ctx->activeMCodeList[i].mNumber = -1;
+        ctx->activeMCodeList[i].hasP = 0;
+        ctx->activeMCodeList[i].pValue = 0.0;
+        ctx->activeMCodeList[i].hasQ = 0;
+        ctx->activeMCodeList[i].qValue = 0.0;
+        ctx->activeMCodeList[i].seq = 0;
+    }
+}
+
+
 // executor function
 static int emcTaskExecute(void)
 {
@@ -2740,13 +2774,90 @@ static int emcTaskExecute(void)
 				} 
 				else 
 				{
-					emcStatus->task.execState = (enum EMC_TASK_EXEC_ENUM)
-					emcTaskCheckPostconditions(emcTaskCommand);
+					emcStatus->task.execState = (enum EMC_TASK_EXEC_ENUM)emcTaskCheckPostconditions(emcTaskCommand);
 					emcTaskEager = 1;
 				}
 				emcTaskCommand = 0;	// reset it
 			}
 		}
+		break;
+
+	case EMC_TASK_EXEC_WAITING_FOR_M_CODES:
+		STEPPING_CHECK();
+
+		// emcStatus->MCodes.ActiveMCode[];   
+		// 计划：只判断emcStatus->MCodes.ActiveMCode此数组中被触发的M代码是否执行完毕
+		// 其他的不判断（初步计划于emcTaskCheckPreconditions中对emcStatus->MCodes.ActiveMCode数组置False）
+
+		// 这行为异常情况，进入此分支后，说明本行M代码下发时没有任何M代码被触发，表示给的数据有问题，直接报错
+		if(emcStatus->task.mcodeCtx.activeMcodeListCount <= 0)
+		{
+			emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+		}
+		// 判断本行所有M代码是否已执行完毕
+        // doneCount 由PLC完成反馈时递增，activeMcodeListCount 是下发时记录的总数
+        else 
+        {
+			// 是否全部完成的标识位
+			bool allDone = true;
+
+			for (int i = 0; i < EMC_MAX_ACTIVE_MCODE_LIST; i++)
+			{
+				if(emcStatus->task.mcodeCtx.activeMCodeList[i].mNumber < 0)
+				{
+					continue;
+				}
+				// 0~100
+				// 如果M代码号小于等于100，表示是系统保留的M代码，不需要等待PLC反馈，直接跳过
+				else if(emcStatus->task.mcodeCtx.activeMCodeList[i].mNumber <= EMC_MAX_OFFICIAL_BOUNDARY_MCODE_LIST)
+				{
+					continue;
+				}
+				// 100~500
+				// 非阻塞型M代码，不需要等待执行完毕，直接跳过
+				else if(emcStatus->task.mcodeCtx.activeMCodeList[i].mNumber <= EMC_MAX_UNBLOCK_BOUNDARY_MCODE_LIST)
+				{
+					continue;
+				}
+				// > 1000 的M代码号，表示是非法的M代码号，直接报错
+				else if(emcStatus->task.mcodeCtx.activeMCodeList[i].mNumber >= EMC_MAX_MCODE_LIST)
+				{
+					emcStatus->task.execState = EMC_TASK_EXEC_ERROR;
+					allDone = false;
+					break;
+				}
+				// 500~1000
+				else 
+				{
+					EMC_MCODE_ENTRY tmp = emcStatus->task.mcodeListWithPLC[emcStatus->task.mcodeCtx.activeMCodeList[i].mNumber];
+					if(tmp.state > 0)
+					{
+						allDone = false;
+						break;
+					}
+				}
+			}
+
+			// 如果全部完成，标记本行M代码完成，并清理本行M代码上下文，为下一行做准备
+			if(allDone)
+			{
+				
+				if (emc_debug & EMC_DEBUG_TASK_ISSUE)
+				{
+					rcs_print("M_CODES done: line=%d count=%d\n",
+						emcStatus->task.currentLine,
+						emcStatus->task.mcodeCtx.activeMcodeListCount);
+				}
+				
+				// 清理本行M代码上下文，为下一行做准备
+				mcode_ctx_reset(&emcStatus->task.mcodeCtx);
+				
+				emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+				emcTaskEager = 1;
+			}
+
+        }
+
 		break;
 
     case EMC_TASK_EXEC_WAITING_FOR_MOTION_QUEUE:
