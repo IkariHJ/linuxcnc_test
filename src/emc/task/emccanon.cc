@@ -2341,6 +2341,20 @@ void DISABLE_FEED_HOLD()
     interp_list.append(set_feed_hold_msg);
 }
 
+void CUSTOM_USER_M_CODES(int index , bool p_flag , double p_number , bool q_flag , double q_number)
+{    
+    // ★ 构造 EMC_M_CODE_MEG 命令，加入 interp_list 走task调度
+    EMC_M_CODE_MEG mcode_cmd;
+    flush_segments();
+    mcode_cmd.mcodeCtx.activeMcodeListCount = 1;
+    mcode_cmd.mcodeCtx.activeMCodeList[0].mNumber = index;
+    mcode_cmd.mcodeCtx.activeMCodeList[0].value = 0;
+    mcode_cmd.mcodeCtx.pValue = p_flag ? p_number : 0.0;
+    mcode_cmd.mcodeCtx.qValue = q_flag ? q_number : 0.0;
+    
+    interp_list.append(&mcode_cmd);
+}
+
 void FLOOD_OFF()
 {
     EMC_COOLANT_FLOOD_OFF flood_off_msg;

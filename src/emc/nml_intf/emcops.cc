@@ -155,21 +155,17 @@ EMC_TASK_STAT_MSG(EMC_TASK_STAT_TYPE, sizeof(EMC_TASK_STAT))
     for (int i = 0; i < EMC_MAX_MCODE_LIST; i++) 
     {
         mcodeListWithPLC[i].state = 0;    // 0=未使用, 1=使用中
-        mcodeListWithPLC[i].p = 0.0;
-        mcodeListWithPLC[i].q = 0.0;
+        mcodeListWithPLC[i].value = 0;  
     }
 
     // ★ 新增：当前行M代码上下文初始化
     mcodeCtx.activeMcodeListCount = 0;
-    mcodeCtx.writeSeq = 0;
-    for (int i = 0; i < 16; i++) 
+    mcodeCtx.pValue = 0;
+    mcodeCtx.qValue = 0;
+    for (int i = 0; i < EMC_MAX_ACTIVE_MCODE_LIST; i++) 
     {
         mcodeCtx.activeMCodeList[i].mNumber = -1;
-        mcodeCtx.activeMCodeList[i].hasP = 0;
-        mcodeCtx.activeMCodeList[i].pValue = 0.0;
-        mcodeCtx.activeMCodeList[i].hasQ = 0;
-        mcodeCtx.activeMCodeList[i].qValue = 0;
-        mcodeCtx.activeMCodeList[i].seq = 0;
+        mcodeCtx.activeMCodeList[i].value = 0;
     }
 }
 

@@ -1671,13 +1671,42 @@ static int emcTaskCheckPreconditions(NMLmsg * cmd)
     case EMC_MCODE_TYPE:
 	// 在此处对译码识别的M代码进行置位
 
+	// ★ 加日志
+    rcs_print("MCODE precond: count=%d m0=%d p=%f q=%f\n",
+        emcStatus->task.mcodeCtx.activeMcodeListCount,
+        emcStatus->task.mcodeCtx.activeMCodeList[0].mNumber,
+        emcStatus->task.mcodeCtx.pValue,
+        emcStatus->task.mcodeCtx.qValue);
+
 	// 1、对emcStatus->MCodes.ActiveMCode数组置位，表示当前正在执行的M代码
     // 步骤1： emcStatus->MCodes.ActiveMCode = ((EMC_M_CODE_MEG *) cmd)->activemcode;
     // 步骤2： 判断emcStatus->MCodes.ActiveMCode 是否有被触发的M代码，有：继续执行步骤3，没有：返回EMC_TASK_EXEC_DONE
+	emcStatus->task.mcodeCtx = ((EMC_M_CODE_MEG *) cmd)->mcodeCtx;
+	if(emcStatus->task.mcodeCtx.activeMcodeListCount <= 0)
+	{
+		return EMC_TASK_EXEC_DONE;
+	}
 
 	// 2、对emcStatus->MCodes.MCodeList数组进行置位，表示当前正在执行的M代码的状态，供PLC使用（此数组PLC需要对其进行复位！！！）
     // 步骤1： 通过emcStatus->MCodes.ActiveMCode中被触发ID,做index对emcStatus->MCodes.MCodeList进行置位，表示当前正在执行的M代码的状态
-
+	for (int i = 0; i < EMC_MAX_ACTIVE_MCODE_LIST; i++)
+	{
+		if(emcStatus->task.mcodeCtx.activeMCodeList[i].mNumber <= EMC_MAX_OFFICIAL_BOUNDARY_MCODE_LIST)
+		{
+			continue;
+		}
+		else if(emcStatus->task.mcodeCtx.activeMCodeList[i].mNumber >= EMC_MAX_MCODE_LIST)
+		{
+			continue;
+		}
+		else
+		{
+			emcStatus->task.mcodeListWithPLC[emcStatus->task.mcodeCtx.activeMCodeList[i].mNumber].state = 1;
+			emcStatus->task.mcodeListWithPLC[emcStatus->task.mcodeCtx.activeMCodeList[i].mNumber].value = emcStatus->task.mcodeCtx.activeMCodeList[i].value;
+		}
+	}
+	
+	rcs_print("MCODE precond: line=%d count=%d\n", emcStatus->task.currentLine, emcStatus->task.mcodeCtx.activeMcodeListCount);
 
 	// emcStatus->MCodes.ActiveMCode数组存的是Index,例如：当前在跑三个M代码，数组长度为3，数组内容为[1,2,3]，表示当前正在执行M1、M2、M3
 	// emcStatus->MCodes.ActiveMCode数组最大长度为10,意味译码出来的M代码最多支持10个同时执行
@@ -2029,6 +2058,11 @@ static int emcTaskIssueCommand(NMLmsg * cmd)
 					((EMC_TRAJ_RIGID_TAP *) cmd)->scale);
 			break;
 
+		case EMC_MCODE_TYPE:
+			// 空操作，置位已在 preconditions 完成
+			retval = 0;
+			break;
+			
 		case EMC_TRAJ_SET_TELEOP_ENABLE_TYPE:
 			if (((EMC_TRAJ_SET_TELEOP_ENABLE *) cmd)->enable) 
 			{
@@ -2624,6 +2658,11 @@ static int emcTaskCheckPostconditions(NMLmsg * cmd)
 	return EMC_TASK_EXEC_DONE;
 	break;
 
+	case EMC_MCODE_TYPE:
+		return EMC_TASK_EXEC_DONE;
+		break;
+
+
     default:
 	// unrecognized command
 	if (emc_debug & EMC_DEBUG_TASK_ISSUE) {
@@ -2659,15 +2698,13 @@ if (stepping) {                                                            \
 static void mcode_ctx_reset(EMC_TASK_MCODE_CTX *ctx)
 {
     ctx->activeMcodeListCount = 0;
-    // writeSeq 不重置
+    ctx->pValue = 0;
+    ctx->qValue = 0;
+	// writeSeq 不重置
     for (int i = 0; i < EMC_MAX_ACTIVE_MCODE_LIST; i++)
     {
         ctx->activeMCodeList[i].mNumber = -1;
-        ctx->activeMCodeList[i].hasP = 0;
-        ctx->activeMCodeList[i].pValue = 0.0;
-        ctx->activeMCodeList[i].hasQ = 0;
-        ctx->activeMCodeList[i].qValue = 0.0;
-        ctx->activeMCodeList[i].seq = 0;
+        ctx->activeMCodeList[i].value = 0;
     }
 }
 
@@ -2785,6 +2822,18 @@ static int emcTaskExecute(void)
 	case EMC_TASK_EXEC_WAITING_FOR_M_CODES:
 		STEPPING_CHECK();
 
+		{
+			// ★ 加日志
+			static int wait_loop = 0;
+			if (wait_loop++ % 100 == 0) {
+				rcs_print("MCODE wait: loop=%d count=%d m0=%d state[%d]=%d\n",
+					wait_loop,
+					emcStatus->task.mcodeCtx.activeMcodeListCount,
+					emcStatus->task.mcodeCtx.activeMCodeList[0].mNumber,
+					emcStatus->task.mcodeCtx.activeMCodeList[0].mNumber,
+					emcStatus->task.mcodeListWithPLC[emcStatus->task.mcodeCtx.activeMCodeList[0].mNumber].state);
+			}
+    	}
 		// emcStatus->MCodes.ActiveMCode[];   
 		// 计划：只判断emcStatus->MCodes.ActiveMCode此数组中被触发的M代码是否执行完毕
 		// 其他的不判断（初步计划于emcTaskCheckPreconditions中对emcStatus->MCodes.ActiveMCode数组置False）
@@ -2803,6 +2852,7 @@ static int emcTaskExecute(void)
 
 			for (int i = 0; i < EMC_MAX_ACTIVE_MCODE_LIST; i++)
 			{
+
 				if(emcStatus->task.mcodeCtx.activeMCodeList[i].mNumber < 0)
 				{
 					continue;
@@ -2853,6 +2903,7 @@ static int emcTaskExecute(void)
 				mcode_ctx_reset(&emcStatus->task.mcodeCtx);
 				
 				emcStatus->task.execState = EMC_TASK_EXEC_DONE;
+				rcs_print("MCODE done: line=%d\n", emcStatus->task.currentLine);
 				emcTaskEager = 1;
 			}
 

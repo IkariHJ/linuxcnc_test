@@ -1132,14 +1132,18 @@ int Interp::read_m(char *line,   //!< string: line of RS274 code being processed
       return INTERP_OK;
   }
 
-  CHKS((value > 199), NCE_M_CODE_GREATER_THAN_199,value);
-  mode = _ems[value];
-  CHKS((mode == -1), NCE_UNKNOWN_M_CODE_USED,value);
+  CHKS((value > EMC_MAX_MCODE_LIST), NCE_M_CODE_GREATER_THAN_199,value);
+  if (value >= EMC_MAX_OFFICIAL_BOUNDARY_MCODE_LIST) {
+    mode = 10;  // M100+ 全部走用户自定义组（第10组），不查_ems表
+  } else {
+    mode = _ems[value];
+    CHKS((mode == -1), NCE_UNKNOWN_M_CODE_USED, value);
+  }
   CHKS((block->m_modes[mode] != -1),
       NCE_TWO_M_CODES_USED_FROM_SAME_MODAL_GROUP);
   block->m_modes[mode] = value;
   block->m_count++;
-  if (value >= 100 && value < 200) {
+  if (value >= EMC_MAX_OFFICIAL_BOUNDARY_MCODE_LIST && value < EMC_MAX_MCODE_LIST) {
     block->user_m = 1;
   }
   return INTERP_OK;

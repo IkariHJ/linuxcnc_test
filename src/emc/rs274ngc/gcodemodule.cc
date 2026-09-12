@@ -455,6 +455,7 @@ void SET_BLOCK_DELETE(bool enabled) {}
 void DISABLE_FEED_OVERRIDE() {}
 void DISABLE_FEED_HOLD() {}
 void ENABLE_FEED_HOLD() {}
+void CUSTOM_USER_M_CODES(int index , bool p_flag , double p_number , bool q_flag , double q_number) {}
 void DISABLE_SPEED_OVERRIDE(int spindle) {}
 void ENABLE_FEED_OVERRIDE() {}
 void ENABLE_SPEED_OVERRIDE(int spindle) {}

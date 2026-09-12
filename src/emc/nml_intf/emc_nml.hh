@@ -24,6 +24,34 @@
 #include "canon.hh"		// CANON_TOOL_TABLE, CANON_UNITS
 #include "rs274ngc.hh"		// ACTIVE_G_CODES, etc
 
+
+#define EMC_MAX_OFFICIAL_BOUNDARY_MCODE_LIST 100
+#define EMC_MAX_UNBLOCK_BOUNDARY_MCODE_LIST 500
+#define EMC_MAX_MCODE_LIST 1000
+#define EMC_MAX_ACTIVE_MCODE_LIST 16
+
+// M代码列表结构体，给PLC读取，和PLC交互使用
+struct EMC_MCODE_ENTRY {
+    int value;
+    int state;
+};
+
+// 给Task使用,当前处于激活状态的M代码（单个模板）
+typedef struct {
+    int mNumber;        /* M代码号 */
+    int value;
+} EMC_MCODE_ITEM;
+
+// 给Task使用,当前处于激活状态的M代码（数组），当前行激活的M代码数组
+typedef struct {
+    EMC_MCODE_ITEM activeMCodeList[EMC_MAX_ACTIVE_MCODE_LIST];
+    int activeMcodeListCount; /* 当前活跃M代码数量 */
+    double pValue;
+    double qValue;
+} EMC_TASK_MCODE_CTX;
+
+
+
 // ------------------
 // CLASS DECLARATIONS
 // ------------------
@@ -1012,22 +1040,6 @@ class EMC_TRAJ_RIGID_TAP:public EMC_TRAJ_CMD_MSG {
 };
 
 
-
-class EMC_M_CODE_MEG:public EMC_TRAJ_CMD_MSG {
-  public:
-    EMC_M_CODE_MEG():EMC_TRAJ_CMD_MSG(EMC_MCODE_TYPE,
-					    sizeof(EMC_M_CODE_MEG)) {
-    };
-
-    // For internal NML/CMS use only.
-    void update(CMS * cms);
-
-    int type;
-    // 用此ActiveMCode此数组的类型新建一个对象，长度和外面那个一致
-    // int activemcode[EMC_MCODE_MAX_DATA];
-};
-
-
 // EMC_TRAJ status base class
 class EMC_TRAJ_STAT_MSG:public RCS_STAT_MSG {
   public:
@@ -1497,36 +1509,6 @@ class EMC_TASK_STAT_MSG:public RCS_STAT_MSG {
 
     uint32_t heartbeat;
 };
-
-
-#define EMC_MAX_OFFICIAL_BOUNDARY_MCODE_LIST 100
-#define EMC_MAX_UNBLOCK_BOUNDARY_MCODE_LIST 500
-#define EMC_MAX_MCODE_LIST 1000
-#define EMC_MAX_ACTIVE_MCODE_LIST 16
-
-// M代码列表结构体，给PLC读取，和PLC交互使用
-struct EMC_MCODE_ENTRY {
-    double p;
-    double q;
-    int state;
-};
-
-// 给Task使用,当前处于激活状态的M代码（单个模板）
-typedef struct {
-    int mNumber;        /* M代码号 */
-    int hasP;
-    double pValue;
-    int hasQ;
-    double qValue;
-    int seq;            /* 下发序号，与PLC完成反馈配对 */
-} EMC_MCODE_ITEM;
-
-// 给Task使用,当前处于激活状态的M代码（数组），当前行激活的M代码数组
-typedef struct {
-    EMC_MCODE_ITEM activeMCodeList[EMC_MAX_ACTIVE_MCODE_LIST];
-    int activeMcodeListCount; /* 当前活跃M代码数量 */
-    int writeSeq;       /* 本批下发起始seq（水位线） */
-} EMC_TASK_MCODE_CTX;
 
 
 class EMC_TASK_STAT:public EMC_TASK_STAT_MSG {
@@ -2269,6 +2251,23 @@ class EMC_STAT:public EMC_STAT_MSG {
 
     int debug;			// copy of EMC_DEBUG global
 };
+
+
+// EMC_M_CODE command base class
+class EMC_M_CODE_MEG:public EMC_CMD_MSG {
+  public:
+    EMC_M_CODE_MEG():EMC_CMD_MSG(EMC_MCODE_TYPE,
+					    sizeof(EMC_M_CODE_MEG)) {
+    };
+
+    // For internal NML/CMS use only.
+    void update(CMS * cms);
+
+    // 用此ActiveMCode此数组的类型新建一个对象，长度和外面那个一致
+    EMC_TASK_MCODE_CTX mcodeCtx;
+};
+
+
 
 /*
    Declarations of EMC status class implementations, for major subsystems.

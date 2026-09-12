@@ -3241,229 +3241,263 @@ convert_stop).
 int Interp::convert_m(block_pointer block,       //!< pointer to a block of RS274/NGC instructions
 		      setup_pointer settings)    //!< pointer to machine settings
 {
-  int type;
-  double timeout;               // timeout for M66
+    int type;
+    double timeout;               // timeout for M66
 
-  /* The M62-65 commands are used for DIO */
-  /* M62 sets a DIO synched with motion
-     M63 clears a DIO synched with motion
-     M64 sets a DIO immediately
-     M65 clears a DIO immediately
-     M66 waits for an input
-     M67 reads a digital input
-     M68 reads an analog input*/
+    /* The M62-65 commands are used for DIO */
+    /* M62 sets a DIO synched with motion
+        M63 clears a DIO synched with motion
+        M64 sets a DIO immediately
+        M65 clears a DIO immediately
+        M66 waits for an input
+        M67 reads a digital input
+        M68 reads an analog input*/
 
-  if (IS_USER_MCODE(block,settings,5) &&
-      STEP_REMAPPED_IN_BLOCK(block, STEP_M_5) &&
-      ONCE_M(5))  {
-      return convert_remapped_code(block, settings, STEP_M_5, 'm',
-				   block->m_modes[5]);
-  } else if ((block->m_modes[5] == 62) && ONCE_M(5)) {
-      CHKS((settings->cutter_comp_side),
-           (_("Cannot set motion output with cutter radius compensation on")));  // XXX
-      CHKS((!block->p_flag), _("No valid P word with M62"));
-      SET_MOTION_OUTPUT_BIT(round_to_int(block->p_number));
-  } else if ((block->m_modes[5] == 63) && ONCE_M(5)) {
-      CHKS((settings->cutter_comp_side),
-           (_("Cannot set motion digital output with cutter radius compensation on")));  // XXX
-      CHKS((!block->p_flag), _("No valid P word with M63"));
-      CLEAR_MOTION_OUTPUT_BIT(round_to_int(block->p_number));
-  } else if ((block->m_modes[5] == 64) && ONCE_M(5)){
-      CHKS((settings->cutter_comp_side),
-           (_("Cannot set auxiliary digital output with cutter radius compensation on")));  // XXX
-      CHKS((!block->p_flag), _("No valid P word with M64"));
-      SET_AUX_OUTPUT_BIT(round_to_int(block->p_number));
-  } else if ((block->m_modes[5] == 65) && ONCE_M(5)) {
-      CHKS((settings->cutter_comp_side),
-           (_("Cannot set auxiliary digital output with cutter radius compensation on")));  // XXX
-      CHKS((!block->p_flag), _("No valid P word with M65"));
-      CLEAR_AUX_OUTPUT_BIT(round_to_int(block->p_number));
-  } else if ((block->m_modes[5] == 66) && ONCE_M(5)){
+    if (IS_USER_MCODE(block,settings,5) &&
+        STEP_REMAPPED_IN_BLOCK(block, STEP_M_5) &&
+        ONCE_M(5))  
+    {
+        return convert_remapped_code(block, settings, STEP_M_5, 'm', block->m_modes[5]);
+    } 
+    else if ((block->m_modes[5] == 62) && ONCE_M(5)) 
+    {
+        CHKS((settings->cutter_comp_side), (_("Cannot set motion output with cutter radius compensation on")));  // XXX
+        CHKS((!block->p_flag), _("No valid P word with M62"));
+        SET_MOTION_OUTPUT_BIT(round_to_int(block->p_number));
+    } 
+    else if ((block->m_modes[5] == 63) && ONCE_M(5)) 
+    {
+        CHKS((settings->cutter_comp_side), (_("Cannot set motion digital output with cutter radius compensation on")));  // XXX
+        CHKS((!block->p_flag), _("No valid P word with M63"));
+        CLEAR_MOTION_OUTPUT_BIT(round_to_int(block->p_number));
+    } 
+    else if ((block->m_modes[5] == 64) && ONCE_M(5))
+    {
+        CHKS((settings->cutter_comp_side), (_("Cannot set auxiliary digital output with cutter radius compensation on")));  // XXX
+        CHKS((!block->p_flag), _("No valid P word with M64"));
+        SET_AUX_OUTPUT_BIT(round_to_int(block->p_number));
+    } 
+    else if ((block->m_modes[5] == 65) && ONCE_M(5)) 
+    {
+        CHKS((settings->cutter_comp_side), (_("Cannot set auxiliary digital output with cutter radius compensation on")));  // XXX
+        CHKS((!block->p_flag), _("No valid P word with M65"));
+        CLEAR_AUX_OUTPUT_BIT(round_to_int(block->p_number));
+    } 
+    else if ((block->m_modes[5] == 66) && ONCE_M(5))
+    {
 
-    //P-word = digital channel
-    //E-word = analog channel
-    //L-word = wait type (immediate, rise, fall, high, low)
-    //Q-word = timeout
-    // it is an error if:
+        //P-word = digital channel
+        //E-word = analog channel
+        //L-word = wait type (immediate, rise, fall, high, low)
+        //Q-word = timeout
+        // it is an error if:
 
-    // P and E word are specified together
-    CHKS(((block->p_flag) && (block->e_flag)),
-	NCE_BOTH_DIGITAL_AND_ANALOG_INPUT_SELECTED);
+        // P and E word are specified together
+        CHKS(((block->p_flag) && (block->e_flag)),
+        NCE_BOTH_DIGITAL_AND_ANALOG_INPUT_SELECTED);
 
-    // L-word not 0, and timeout <= 0
-    CHKS(((block->q_number <= 0) && (block->l_flag) && (round_to_int(block->l_number) > 0)),
-	NCE_ZERO_TIMEOUT_WITH_WAIT_NOT_IMMEDIATE);
+        // L-word not 0, and timeout <= 0
+        CHKS(((block->q_number <= 0) && (block->l_flag) && (round_to_int(block->l_number) > 0)),
+        NCE_ZERO_TIMEOUT_WITH_WAIT_NOT_IMMEDIATE);
 
-    // E-word specified (analog input) and wait type not immediate
-    CHKS(((block->e_flag) && (block->l_flag) && (round_to_int(block->l_number) != 0)),
-	NCE_ANALOG_INPUT_WITH_WAIT_NOT_IMMEDIATE);
+        // E-word specified (analog input) and wait type not immediate
+        CHKS(((block->e_flag) && (block->l_flag) && (round_to_int(block->l_number) != 0)),
+        NCE_ANALOG_INPUT_WITH_WAIT_NOT_IMMEDIATE);
 
-    // missing P or E (or invalid = negative)
-    CHKS( ((block->p_flag) && (round_to_int(block->p_number) < 0)) ||
-         ((block->e_flag) && (round_to_int(block->e_number) < 0)) ||
-	 ((!block->p_flag) && (!block->e_flag)) ,
-	NCE_INVALID_OR_MISSING_P_AND_E_WORDS_FOR_WAIT_INPUT);
+        // missing P or E (or invalid = negative)
+        CHKS( ((block->p_flag) && (round_to_int(block->p_number) < 0)) ||
+            ((block->e_flag) && (round_to_int(block->e_number) < 0)) ||
+        ((!block->p_flag) && (!block->e_flag)) ,
+        NCE_INVALID_OR_MISSING_P_AND_E_WORDS_FOR_WAIT_INPUT);
 
-    write_canon_state_tag(block, settings);
-    if (block->p_flag) { // got a digital input
-	if (round_to_int(block->p_number) < 0) // safety check for negative words
-	    ERS(_("invalid P-word with M66"));
+        write_canon_state_tag(block, settings);
+        if (block->p_flag) { // got a digital input
+        if (round_to_int(block->p_number) < 0) // safety check for negative words
+            ERS(_("invalid P-word with M66"));
 
-	if (block->l_flag) {
-	    type = round_to_int(block->l_number);
-	} else {
-	    type = WAIT_MODE_IMMEDIATE;
+        if (block->l_flag) 
+        {
+            type = round_to_int(block->l_number);
+        } 
+        else 
+        {
+            type = WAIT_MODE_IMMEDIATE;
         }
 
-	if (block->q_number > 0) {
-	    timeout = block->q_number;
-	} else {
-	    timeout = 0;
+        if (block->q_number > 0) 
+        {
+            timeout = block->q_number;
+        } 
+        else 
+        {
+            timeout = 0;
         }
 
         CHKS((settings->cutter_comp_side),
-             (_("Cannot wait for digital input with cutter radius compensation on")));
+            (_("Cannot wait for digital input with cutter radius compensation on")));
 
-	int ret = WAIT(round_to_int(block->p_number), DIGITAL_INPUT, type, timeout);
-	//WAIT returns 0 on success, -1 for out of bounds
-	CHKS((ret == -1), NCE_DIGITAL_INPUT_INVALID_ON_M66);
-	if (ret == 0) {
-	    settings->input_flag = true;
-	    settings->input_index = round_to_int(block->p_number);
-	    settings->input_digital = true;
-	}
-    } else if (round_to_int(block->e_number) >= 0) { // got an analog input
-        CHKS((settings->cutter_comp_side),
-             (_("Cannot wait for analog input with cutter radius compensation on")));
-
-	int ret = WAIT(round_to_int(block->e_number), ANALOG_INPUT, 0, 0); //WAIT returns 0 on success, -1 for out of bounds
-	CHKS((ret == -1), NCE_ANALOG_INPUT_INVALID_ON_M66);
-	if (ret == 0) {
-	    settings->input_flag = true;
-	    settings->input_index = round_to_int(block->e_number);
-	    settings->input_digital = false;
-	}
-    }
-  } else if ((block->m_modes[5] == 67) && ONCE_M(5)) {
-
-    //E-word = analog channel
-    //Q-word = analog value
-      CHKS((settings->cutter_comp_side),
-           (_("Cannot set motion analog output with cutter radius compensation on")));  // XXX
-      CHKS((!block->e_flag) || (round_to_int(block->e_number) < 0), (_("Invalid analog index with M67")));
-      SET_MOTION_OUTPUT_VALUE(round_to_int(block->e_number), block->q_number);
-  } else if ((block->m_modes[5] == 68)  && ONCE_M(5)) {
-    //E-word = analog channel
-    //Q-word = analog value
-      CHKS((settings->cutter_comp_side),
-           (_("Cannot set auxiliary analog output with cutter radius compensation on")));  // XXX
-      CHKS((!block->e_flag) || (round_to_int(block->e_number) < 0), (_("Invalid analog index with M68")));
-      SET_AUX_OUTPUT_VALUE(round_to_int(block->e_number), block->q_number);
-  }
-
-  if ((block->m_modes[6] != -1)  && ONCE_M(6)){
-      int toolno;
-      bool remapped_in_block = STEP_REMAPPED_IN_BLOCK(block, STEP_M_6);
-
-      switch (block->m_modes[6]) {
-      case 6:
-      	  if (IS_USER_MCODE(block,settings,6) && remapped_in_block) {
-      		  return convert_remapped_code(block,settings,
-      					       STEP_M_6,
-      					       'm',
-      					       block->m_modes[6]);
-	  } else {
-	      // the code was used in its very remap procedure -
-	      // the 'recursion case'; record the fact
-	      CONTROLLING_BLOCK(*settings).builtin_used = !remapped_in_block;
-	      CHP(convert_tool_change(settings));
-	  }
-      	  break;
-
-      case 61:
-	  if (IS_USER_MCODE(block,settings,6) && remapped_in_block) {
-	      return convert_remapped_code(block, settings, STEP_M_6,'m',
-					   block->m_modes[6]);
-	  } else {
-	      CONTROLLING_BLOCK(*settings).builtin_used = !remapped_in_block;
-	      toolno = round_to_int(block->q_number);
-	      // now also accept M61 Q0 - unload tool
-	      CHKS((toolno < 0), (_("Need non-negative Q-word to specify tool number with M61")));
-
-	      int idx;
-
-	      // make sure selected tool exists
-	      CHP((find_tool_index(settings, toolno, &idx)));
-	      settings->current_pocket = idx;
-	      settings->toolchange_flag = true;
-	      CHANGE_TOOL_NUMBER(settings->current_pocket);
-	      set_tool_parameters();
-	  }
-	  break;
-
-      default:
-	  if (IS_USER_MCODE(block,settings,6)) {
-	      return convert_remapped_code(block, settings, STEP_M_6,'m',
-					   block->m_modes[6]);
-	  }
-      }
-  }
-
-  if (FEATURE(RETAIN_G43)) {
-
-      if ((settings->active_g_codes[9] == G_43) && ONCE(STEP_RETAIN_G43)) {
-        if(settings->selected_pocket > 0) {
-            struct block_struct g43;
-            init_block(&g43);
-            block->g_modes[_gees[G_43]] = G_43;
-            CHP(convert_tool_length_offset(G_43, &g43, settings));
-        } else {
-            struct block_struct g49;
-            init_block(&g49);
-            block->g_modes[_gees[G_49]] = G_49;
-            CHP(convert_tool_length_offset(G_49, &g49, settings));
+        int ret = WAIT(round_to_int(block->p_number), DIGITAL_INPUT, type, timeout);
+        //WAIT returns 0 on success, -1 for out of bounds
+        CHKS((ret == -1), NCE_DIGITAL_INPUT_INVALID_ON_M66);
+        if (ret == 0) 
+        {
+            settings->input_flag = true;
+            settings->input_index = round_to_int(block->p_number);
+            settings->input_digital = true;
         }
-    }
-  }
+        } 
+        else if (round_to_int(block->e_number) >= 0) 
+        { // got an analog input
+            CHKS((settings->cutter_comp_side),
+                (_("Cannot wait for analog input with cutter radius compensation on")));
 
- if (IS_USER_MCODE(block,settings,7) && ONCE_M(7)) {
-    return convert_remapped_code(block, settings, STEP_M_7, 'm',
-				   block->m_modes[7]);
- } else if ((block->m_modes[7] == 3)  && ONCE_M(7)) {
-     if (block->dollar_flag){
-        CHKS((block->dollar_number >= settings->num_spindles || block->dollar_number < -1),
-            (_("Spindle ($) number out of range in M3 Command\nnum_spindles =%i. $=%d\n")),settings->num_spindles,(int)block->dollar_number);
-        if (block->dollar_number == -1){ // all spindles
-            for (int i = 0; i < settings->num_spindles; i++){
-                enqueue_START_SPINDLE_CLOCKWISE(i);
-                settings->spindle_turning[i] = CANON_CLOCKWISE;
+            int ret = WAIT(round_to_int(block->e_number), ANALOG_INPUT, 0, 0); //WAIT returns 0 on success, -1 for out of bounds
+            CHKS((ret == -1), NCE_ANALOG_INPUT_INVALID_ON_M66);
+            if (ret == 0) 
+            {
+                settings->input_flag = true;
+                settings->input_index = round_to_int(block->e_number);
+                settings->input_digital = false;
             }
-        } else { // a specific spindle
-            enqueue_START_SPINDLE_CLOCKWISE(block->dollar_number);
-            settings->spindle_turning[(int)block->dollar_number] = CANON_CLOCKWISE;
         }
-     } else { // the default spindle
-        enqueue_START_SPINDLE_CLOCKWISE(0);
-        settings->spindle_turning[0] = CANON_CLOCKWISE;
-     }
- } else if ((block->m_modes[7] == 4) && ONCE_M(7)) {
-     if (block->dollar_flag){
-        CHKS((block->dollar_number >= settings->num_spindles || block->dollar_number < -1),
-            (_("Spindle ($) number out of range in M4 Command\nnum_spindles =%i. $=%d\n")),settings->num_spindles,(int)block->dollar_number);
-        if (block->dollar_number == -1){ // all spindles
-            for (int i = 0; i < settings->num_spindles; i++){
-                 enqueue_START_SPINDLE_COUNTERCLOCKWISE(i);
-                 settings->spindle_turning[i] = CANON_COUNTERCLOCKWISE;
-             }
-         } else { // a specific spindle
-            enqueue_START_SPINDLE_COUNTERCLOCKWISE(block->dollar_number);
-            settings->spindle_turning[(int)block->dollar_number] = CANON_COUNTERCLOCKWISE;
+    } 
+    else if ((block->m_modes[5] == 67) && ONCE_M(5)) 
+    {
+
+        //E-word = analog channel
+        //Q-word = analog value
+        CHKS((settings->cutter_comp_side),
+            (_("Cannot set motion analog output with cutter radius compensation on")));  // XXX
+        CHKS((!block->e_flag) || (round_to_int(block->e_number) < 0), (_("Invalid analog index with M67")));
+        SET_MOTION_OUTPUT_VALUE(round_to_int(block->e_number), block->q_number);
+    } 
+    else if ((block->m_modes[5] == 68)  && ONCE_M(5)) 
+    {
+        //E-word = analog channel
+        //Q-word = analog value
+        CHKS((settings->cutter_comp_side),
+            (_("Cannot set auxiliary analog output with cutter radius compensation on")));  // XXX
+        CHKS((!block->e_flag) || (round_to_int(block->e_number) < 0), (_("Invalid analog index with M68")));
+        SET_AUX_OUTPUT_VALUE(round_to_int(block->e_number), block->q_number);
+    }
+
+    if ((block->m_modes[6] != -1)  && ONCE_M(6))
+    {
+        int toolno;
+        bool remapped_in_block = STEP_REMAPPED_IN_BLOCK(block, STEP_M_6);
+
+        switch (block->m_modes[6]) 
+        {
+            case 6:
+                if (IS_USER_MCODE(block,settings,6) && remapped_in_block) 
+                {
+                return convert_remapped_code(block,settings, STEP_M_6, 'm', block->m_modes[6]);
+                } 
+                else 
+                {
+                    // the code was used in its very remap procedure -
+                    // the 'recursion case'; record the fact
+                    CONTROLLING_BLOCK(*settings).builtin_used = !remapped_in_block;
+                    CHP(convert_tool_change(settings));
+                }
+                break;
+
+            case 61:
+                if (IS_USER_MCODE(block,settings,6) && remapped_in_block) 
+                {
+                    return convert_remapped_code(block, settings, STEP_M_6,'m',
+                                block->m_modes[6]);
+                } 
+                else 
+                {
+                    CONTROLLING_BLOCK(*settings).builtin_used = !remapped_in_block;
+                    toolno = round_to_int(block->q_number);
+                    // now also accept M61 Q0 - unload tool
+                    CHKS((toolno < 0), (_("Need non-negative Q-word to specify tool number with M61")));
+
+                    int idx;
+
+                    // make sure selected tool exists
+                    CHP((find_tool_index(settings, toolno, &idx)));
+                    settings->current_pocket = idx;
+                    settings->toolchange_flag = true;
+                    CHANGE_TOOL_NUMBER(settings->current_pocket);
+                    set_tool_parameters();
+                }
+                break;
+
+            default:
+                if (IS_USER_MCODE(block,settings,6)) 
+                {
+                    return convert_remapped_code(block, settings, STEP_M_6,'m',
+                                block->m_modes[6]);
+                }
+            }
+    }
+
+    if (FEATURE(RETAIN_G43)) 
+    {
+
+        if ((settings->active_g_codes[9] == G_43) && ONCE(STEP_RETAIN_G43)) 
+        {
+            if(settings->selected_pocket > 0) 
+            {
+                struct block_struct g43;
+                init_block(&g43);
+                block->g_modes[_gees[G_43]] = G_43;
+                CHP(convert_tool_length_offset(G_43, &g43, settings));
+            } 
+            else 
+            {
+                struct block_struct g49;
+                init_block(&g49);
+                block->g_modes[_gees[G_49]] = G_49;
+                CHP(convert_tool_length_offset(G_49, &g49, settings));
+            }
         }
-     } else { // default spindle
-         enqueue_START_SPINDLE_COUNTERCLOCKWISE(0);
-         settings->spindle_turning[0] = CANON_COUNTERCLOCKWISE;
-     }
- } else if ((block->m_modes[7] == 5) && ONCE_M(7)){
+    }
+
+    if (IS_USER_MCODE(block,settings,7) && ONCE_M(7)) 
+    {
+        return convert_remapped_code(block, settings, STEP_M_7, 'm',
+                    block->m_modes[7]);
+    } 
+    else if ((block->m_modes[7] == 3)  && ONCE_M(7)) {
+        if (block->dollar_flag){
+            CHKS((block->dollar_number >= settings->num_spindles || block->dollar_number < -1),
+                (_("Spindle ($) number out of range in M3 Command\nnum_spindles =%i. $=%d\n")),settings->num_spindles,(int)block->dollar_number);
+            if (block->dollar_number == -1){ // all spindles
+                for (int i = 0; i < settings->num_spindles; i++){
+                    enqueue_START_SPINDLE_CLOCKWISE(i);
+                    settings->spindle_turning[i] = CANON_CLOCKWISE;
+                }
+            } else { // a specific spindle
+                enqueue_START_SPINDLE_CLOCKWISE(block->dollar_number);
+                settings->spindle_turning[(int)block->dollar_number] = CANON_CLOCKWISE;
+            }
+        } else { // the default spindle
+            enqueue_START_SPINDLE_CLOCKWISE(0);
+            settings->spindle_turning[0] = CANON_CLOCKWISE;
+        }
+    } 
+    else if ((block->m_modes[7] == 4) && ONCE_M(7)) {
+        if (block->dollar_flag){
+            CHKS((block->dollar_number >= settings->num_spindles || block->dollar_number < -1),
+                (_("Spindle ($) number out of range in M4 Command\nnum_spindles =%i. $=%d\n")),settings->num_spindles,(int)block->dollar_number);
+            if (block->dollar_number == -1){ // all spindles
+                for (int i = 0; i < settings->num_spindles; i++){
+                    enqueue_START_SPINDLE_COUNTERCLOCKWISE(i);
+                    settings->spindle_turning[i] = CANON_COUNTERCLOCKWISE;
+                }
+            } else { // a specific spindle
+                enqueue_START_SPINDLE_COUNTERCLOCKWISE(block->dollar_number);
+                settings->spindle_turning[(int)block->dollar_number] = CANON_COUNTERCLOCKWISE;
+            }
+        } else { // default spindle
+            enqueue_START_SPINDLE_COUNTERCLOCKWISE(0);
+            settings->spindle_turning[0] = CANON_COUNTERCLOCKWISE;
+        }
+    } else if ((block->m_modes[7] == 5) && ONCE_M(7)){
     if (block->dollar_flag){
         CHKS((block->dollar_number >= settings->num_spindles || block->dollar_number < -1),
             (_("Spindle ($) number out of range in M5 Command\nnum_spindles =%i. $=%d\n")),settings->num_spindles,(int)block->dollar_number);
@@ -3477,71 +3511,71 @@ int Interp::convert_m(block_pointer block,       //!< pointer to a block of RS27
             enqueue_STOP_SPINDLE_TURNING(block->dollar_number);
         }
     } else { // the default spindle
-      for (int i = 0; i < settings->num_spindles; i++){
+        for (int i = 0; i < settings->num_spindles; i++){
         settings->spindle_turning[i] = CANON_STOPPED;
         enqueue_STOP_SPINDLE_TURNING(i);
-      }
+        }
     }
-  } else if ((block->m_modes[7] == 19) && ONCE_M(7)) {
-      for (int i = 0; i < settings->num_spindles; i++)
-          settings->spindle_turning[i] = CANON_STOPPED;
-      if (block->dollar_flag){
-         CHKS((block->dollar_number >= settings->num_spindles || block->dollar_number < 0),
-             (_("Spindle ($) number out of range in M19 Command")));
-      }
-      if (block->r_flag || block->p_flag)
-      enqueue_ORIENT_SPINDLE(block->dollar_flag ? block->dollar_number : 0,
-                             block->r_flag ? (block->r_number + settings->orient_offset) : settings->orient_offset,
-                             block->p_flag ? block->p_number : 0);
-      if (block->q_flag) {
-	  CHKS((block->q_number <= 0.0),(_("Q word with M19 requires a value > 0")));
-	  enqueue_WAIT_ORIENT_SPINDLE_COMPLETE(block->dollar_flag ? block->dollar_number : 0,
-			  	  	  	  	  	  	  	   block->q_number);
-      }
-  } else if ((block->m_modes[7] == 70) || (block->m_modes[7] == 73)) {
+    } else if ((block->m_modes[7] == 19) && ONCE_M(7)) {
+        for (int i = 0; i < settings->num_spindles; i++)
+            settings->spindle_turning[i] = CANON_STOPPED;
+        if (block->dollar_flag){
+            CHKS((block->dollar_number >= settings->num_spindles || block->dollar_number < 0),
+                (_("Spindle ($) number out of range in M19 Command")));
+        }
+        if (block->r_flag || block->p_flag)
+        enqueue_ORIENT_SPINDLE(block->dollar_flag ? block->dollar_number : 0,
+                                block->r_flag ? (block->r_number + settings->orient_offset) : settings->orient_offset,
+                                block->p_flag ? block->p_number : 0);
+        if (block->q_flag) {
+        CHKS((block->q_number <= 0.0),(_("Q word with M19 requires a value > 0")));
+        enqueue_WAIT_ORIENT_SPINDLE_COMPLETE(block->dollar_flag ? block->dollar_number : 0,
+                                            block->q_number);
+        }
+    } else if ((block->m_modes[7] == 70) || (block->m_modes[7] == 73)) {
 
-     // save state in current stack frame. We borrow the o-word call stack
-     // and extend it to hold modes & settings.
-     save_settings(&_setup);
+        // save state in current stack frame. We borrow the o-word call stack
+        // and extend it to hold modes & settings.
+        save_settings(&_setup);
 
-     // flag this frame as containing a valid context
-     _setup.sub_context[_setup.call_level].context_status |= CONTEXT_VALID;
+        // flag this frame as containing a valid context
+        _setup.sub_context[_setup.call_level].context_status |= CONTEXT_VALID;
 
-     // mark as auto-restore context
-     if (block->m_modes[7] == 73) {
-	 if (_setup.call_level == 0) {
-	     MSG("Warning - M73 at top level: nothing to return to; storing context anyway\n");
-	 } else {
-	     _setup.sub_context[_setup.call_level].context_status |= CONTEXT_RESTORE_ON_RETURN;
-	 }
-     }
- } else if ((block->m_modes[7] == 71) && ONCE_M(7))  {
-      // M72 - invalidate context at current level
-      _setup.sub_context[_setup.call_level].context_status &= ~CONTEXT_VALID;
+        // mark as auto-restore context
+        if (block->m_modes[7] == 73) {
+        if (_setup.call_level == 0) {
+            MSG("Warning - M73 at top level: nothing to return to; storing context anyway\n");
+        } else {
+            _setup.sub_context[_setup.call_level].context_status |= CONTEXT_RESTORE_ON_RETURN;
+        }
+        }
+    } else if ((block->m_modes[7] == 71) && ONCE_M(7))  {
+        // M72 - invalidate context at current level
+        _setup.sub_context[_setup.call_level].context_status &= ~CONTEXT_VALID;
 
- } else if ((block->m_modes[7] == 72)  && ONCE_M(7)) {
+    } else if ((block->m_modes[7] == 72)  && ONCE_M(7)) {
 
-      // restore state from current stack frame.
-      CHKS((!(_setup.sub_context[_setup.call_level].context_status & CONTEXT_VALID)),
-           (_("Cannot restore context from invalid stack frame - missing M70/M73?")));
-      CHP(restore_settings(&_setup, _setup.call_level));
-  }
+        // restore state from current stack frame.
+        CHKS((!(_setup.sub_context[_setup.call_level].context_status & CONTEXT_VALID)),
+            (_("Cannot restore context from invalid stack frame - missing M70/M73?")));
+        CHP(restore_settings(&_setup, _setup.call_level));
+    }
 
-  if (IS_USER_MCODE(block,settings,8) && ONCE_M(8)) {
-     return convert_remapped_code(block, settings, STEP_M_8, 'm',
-				   block->m_modes[8]);
-  } else if ((block->m_modes[8] == 7) && ONCE_M(8)){
-      enqueue_MIST_ON();
-      settings->mist = true;
-  } else if ((block->m_modes[8] == 8) && ONCE_M(8)) {
-      enqueue_FLOOD_ON();
-      settings->flood = true;
-  } else if ((block->m_modes[8] == 9) && ONCE_M(8)) {
-      enqueue_MIST_OFF();
-      settings->mist = false;
-      enqueue_FLOOD_OFF();
-      settings->flood = false;
-  }
+    if (IS_USER_MCODE(block,settings,8) && ONCE_M(8)) {
+        return convert_remapped_code(block, settings, STEP_M_8, 'm',
+                    block->m_modes[8]);
+    } else if ((block->m_modes[8] == 7) && ONCE_M(8)){
+        enqueue_MIST_ON();
+        settings->mist = true;
+    } else if ((block->m_modes[8] == 8) && ONCE_M(8)) {
+        enqueue_FLOOD_ON();
+        settings->flood = true;
+    } else if ((block->m_modes[8] == 9) && ONCE_M(8)) {
+        enqueue_MIST_OFF();
+        settings->mist = false;
+        enqueue_FLOOD_OFF();
+        settings->flood = false;
+    }
 
 /* No axis clamps in this version
   if (block->m_modes[2] == 26)
@@ -3559,112 +3593,118 @@ int Interp::convert_m(block_pointer block,       //!< pointer to a block of RS27
       settings->a_axis_clamping = false;
     }
 */
-if (IS_USER_MCODE(block,settings,9) && ONCE_M(9)) {
-     return convert_remapped_code(block, settings, STEP_M_9, 'm',
-				   block->m_modes[9]);
- } else if ((block->m_modes[9] == 48)  && ONCE_M(9)){
-    CHKS((settings->cutter_comp_side),
-         (_("Cannot enable overrides with cutter radius compensation on")));  // XXX
-    ENABLE_FEED_OVERRIDE();
-    settings->feed_override = true;
-    for (int s = 0; s < settings->num_spindles; s++){
-    	settings->speed_override[s] = true;
-        ENABLE_SPEED_OVERRIDE(s);
-    }
- } else if ((block->m_modes[9] == 49)  && ONCE_M(9)){
-    CHKS((settings->cutter_comp_side),
-         (_("Cannot disable overrides with cutter radius compensation on")));  // XXX
-    DISABLE_FEED_OVERRIDE();
-    settings->feed_override = false;
-    for (int s = 0; s < settings->num_spindles; s++){
-    	settings->speed_override[s] = false;
-        DISABLE_SPEED_OVERRIDE(s);
-    }
-  }
-
-if ((block->m_modes[9] == 50)  && ONCE_M(9)){
-    if (block->p_number != 0) {
+    if (IS_USER_MCODE(block,settings,9) && ONCE_M(9)) {
+        return convert_remapped_code(block, settings, STEP_M_9, 'm',
+                    block->m_modes[9]);
+    } else if ((block->m_modes[9] == 48)  && ONCE_M(9)){
         CHKS((settings->cutter_comp_side),
-             (_("Cannot enable overrides with cutter radius compensation on")));  // XXX
-	ENABLE_FEED_OVERRIDE();
-	settings->feed_override = true;
-    } else {
+            (_("Cannot enable overrides with cutter radius compensation on")));  // XXX
+        ENABLE_FEED_OVERRIDE();
+        settings->feed_override = true;
+        for (int s = 0; s < settings->num_spindles; s++){
+            settings->speed_override[s] = true;
+            ENABLE_SPEED_OVERRIDE(s);
+        }
+    } else if ((block->m_modes[9] == 49)  && ONCE_M(9)){
         CHKS((settings->cutter_comp_side),
-             (_("Cannot disable overrides with cutter radius compensation on")));  // XXX
+            (_("Cannot disable overrides with cutter radius compensation on")));  // XXX
         DISABLE_FEED_OVERRIDE();
-	settings->feed_override = false;
+        settings->feed_override = false;
+        for (int s = 0; s < settings->num_spindles; s++){
+            settings->speed_override[s] = false;
+            DISABLE_SPEED_OVERRIDE(s);
+        }
     }
-  }
 
-if ((block->m_modes[9] == 51)  && ONCE_M(9)){
-	int e = -1;
-	if (block->dollar_flag){
-		CHKS((block->dollar_number <= 0 || block->dollar_number >= settings-> num_spindles),
-				(_("Invalid spindle ($) number in M51 command")));
-		e = block->dollar_number;
-	}
-    if (block->p_number != 0) {
-        CHKS((settings->cutter_comp_side),
-             (_("Cannot enable overrides with cutter radius compensation on")));  // XXX
-		for (int s = 0; s < settings->num_spindles; s++){
-			if (e == -1 or s == e){
-				ENABLE_SPEED_OVERRIDE(s);
-				settings->speed_override[s] = true;
-			}
-		}
-    } else {
-        CHKS((settings->cutter_comp_side),
-             (_("Cannot disable overrides with cutter radius compensation on")));  // XXX
-		for (int s = 0; s < settings->num_spindles; s++){
-			if (e == -1 or s == e){
-				DISABLE_SPEED_OVERRIDE(s);
-				settings->speed_override[s] = false;
-			}
-		}
+    if ((block->m_modes[9] == 50)  && ONCE_M(9)){
+        if (block->p_number != 0) {
+            CHKS((settings->cutter_comp_side),
+                (_("Cannot enable overrides with cutter radius compensation on")));  // XXX
+        ENABLE_FEED_OVERRIDE();
+        settings->feed_override = true;
+        } else {
+            CHKS((settings->cutter_comp_side),
+                (_("Cannot disable overrides with cutter radius compensation on")));  // XXX
+            DISABLE_FEED_OVERRIDE();
+        settings->feed_override = false;
+        }
     }
-  }
 
-if ((block->m_modes[9] == 52)  && ONCE_M(9)){
-    if (block->p_number != 0) {
-        CHKS((settings->cutter_comp_side),
-             (_("Cannot enable overrides with cutter radius compensation on")));  // XXX
-	ENABLE_ADAPTIVE_FEED();
-	settings->adaptive_feed = true;
-    } else {
-        CHKS((settings->cutter_comp_side),
-             (_("Cannot disable overrides with cutter radius compensation on")));  // XXX
-	DISABLE_ADAPTIVE_FEED();
-	settings->adaptive_feed = false;
+    if ((block->m_modes[9] == 51)  && ONCE_M(9)){
+        int e = -1;
+        if (block->dollar_flag){
+            CHKS((block->dollar_number <= 0 || block->dollar_number >= settings-> num_spindles),
+                    (_("Invalid spindle ($) number in M51 command")));
+            e = block->dollar_number;
+        }
+        if (block->p_number != 0) {
+            CHKS((settings->cutter_comp_side),
+                (_("Cannot enable overrides with cutter radius compensation on")));  // XXX
+            for (int s = 0; s < settings->num_spindles; s++){
+                if (e == -1 or s == e){
+                    ENABLE_SPEED_OVERRIDE(s);
+                    settings->speed_override[s] = true;
+                }
+            }
+        } else {
+            CHKS((settings->cutter_comp_side),
+                (_("Cannot disable overrides with cutter radius compensation on")));  // XXX
+            for (int s = 0; s < settings->num_spindles; s++){
+                if (e == -1 or s == e){
+                    DISABLE_SPEED_OVERRIDE(s);
+                    settings->speed_override[s] = false;
+                }
+            }
+        }
     }
-  }
 
-if ((block->m_modes[9] == 53)  && ONCE_M(9)){
-    if (block->p_number != 0) {
-        CHKS((settings->cutter_comp_side),
-             (_("Cannot enable overrides with cutter radius compensation on")));  // XXX
-	ENABLE_FEED_HOLD();
-	settings->feed_hold = true;
-    } else {
-        CHKS((settings->cutter_comp_side),
-             (_("Cannot disable overrides with cutter radius compensation on")));  // XXX
-	DISABLE_FEED_HOLD();
-	settings->feed_hold = false;
+    if ((block->m_modes[9] == 52)  && ONCE_M(9)){
+        if (block->p_number != 0) {
+            CHKS((settings->cutter_comp_side),
+                (_("Cannot enable overrides with cutter radius compensation on")));  // XXX
+        ENABLE_ADAPTIVE_FEED();
+        settings->adaptive_feed = true;
+        } else {
+            CHKS((settings->cutter_comp_side),
+                (_("Cannot disable overrides with cutter radius compensation on")));  // XXX
+        DISABLE_ADAPTIVE_FEED();
+        settings->adaptive_feed = false;
+        }
     }
-  }
 
-if (IS_USER_MCODE(block,settings,10) && ONCE_M(10)) {
-    return convert_remapped_code(block,settings,STEP_M_10,'m',
-				   block->m_modes[10]);
-
- } else if ((block->m_modes[10] != -1)  && ONCE_M(10)){
-     /* user-defined M codes */
-    int index = block->m_modes[10];
-    if (USER_DEFINED_FUNCTION[index - 100] == 0) {
-      CHKS(1, NCE_UNKNOWN_M_CODE_USED,index);
+    if ((block->m_modes[9] == 53)  && ONCE_M(9)){
+        if (block->p_number != 0) {
+            CHKS((settings->cutter_comp_side),
+                (_("Cannot enable overrides with cutter radius compensation on")));  // XXX
+        ENABLE_FEED_HOLD();
+        settings->feed_hold = true;
+        } else {
+            CHKS((settings->cutter_comp_side),
+                (_("Cannot disable overrides with cutter radius compensation on")));  // XXX
+        DISABLE_FEED_HOLD();
+        settings->feed_hold = false;
+        }
     }
-    enqueue_M_USER_COMMAND(index,block->p_number,block->q_number);
-  }
-  return INTERP_OK;
+
+    if (IS_USER_MCODE(block,settings,10) && ONCE_M(10)) {
+        return convert_remapped_code(block,settings,STEP_M_10,'m',
+                    block->m_modes[10]);
+
+    } 
+    else if ((block->m_modes[10] != -1)  && ONCE_M(10))
+    {
+        // /* user-defined M codes */
+        // int index = block->m_modes[10];
+        // if (USER_DEFINED_FUNCTION[index - 100] == 0) {
+        // CHKS(1, NCE_UNKNOWN_M_CODE_USED,index);
+        // }
+        // enqueue_M_USER_COMMAND(index,block->p_number,block->q_number);
+
+
+        CUSTOM_USER_M_CODES(block->m_modes[10] , block->p_flag , block->p_number , block->q_flag , block->q_number );
+
+    }
+    return INTERP_OK;
 }
 
 /****************************************************************************/
